@@ -11,6 +11,7 @@ class CNFFormula:
         self.var_count = 0  # 变量数量
         
     def add_clause(self, clause):
+
         """
         向CNF公式添加一个子句
         
@@ -21,9 +22,14 @@ class CNFFormula:
         if not isinstance(clause, list):
             raise ValueError("子句必须是一个整数列表")
         
+        if clause == [None]:
+            return
+        
+        
         # 检查子句中的变量是否有效并更新变量计数
         for lit in clause:
             if not isinstance(lit, int) or lit == 0:
+                print(lit)
                 raise ValueError("子句中的文字必须是非零整数")
             
             var = abs(lit)
@@ -76,14 +82,44 @@ class CNFFormula:
                 raise RuntimeError(f"Minisat运行失败: {result.stderr}")
             
             # 读取并解析结果
+            # with open(result_filename, 'r') as f:
+            #     first_line = f.readline().strip()
+            #     if first_line == 'SAT':
+            #         return 'SAT'
+            #     elif first_line == 'UNSAT':
+            #         return 'UNSAT'
+            #     else:
+            #         raise ValueError(f"无法解析Minisat结果: {first_line}")
+                
+                
             with open(result_filename, 'r') as f:
-                first_line = f.readline().strip()
-                if first_line == 'SAT':
-                    return 'SAT'
-                elif first_line == 'UNSAT':
-                    return 'UNSAT'
-                else:
-                    raise ValueError(f"无法解析Minisat结果: {first_line}")
+                lines = [line.strip() for line in f.readlines() if line.strip()]
+
+            if not lines:
+                return 'ERROR', None  # 输出文件为空
+
+            first_line = lines[0].upper()
+            if first_line == 'SAT':
+                # 解析变量赋值（第二行，格式如"1 -2 3 0"）
+                model = {}
+                if len(lines) >= 2:
+                    assignment_line = lines[1]
+                    for lit_str in assignment_line.split():
+                        try:
+                            lit = int(lit_str)
+                        except ValueError:
+                            continue  # 跳过非整数内容
+                        if lit == 0:
+                            break  # 赋值以0结尾
+                        var = abs(lit)
+                        model[var] = 1 if lit > 0 else -1  # 1=真，-1=假
+                return 'SAT', model
+
+            elif first_line == 'UNSAT':
+                return 'UNSAT', None
+
+            else:
+                return 'ERROR', None
                     
         finally:
             # 清理临时文件
@@ -133,8 +169,9 @@ class SATSolver:
                 self.current_clause.clear()
         else:
             # 累加文字到当前子句，并更新最大变量
-            self.current_clause.append(dimacs_lit)
-            var = abs(dimacs_lit)
+            i_dimacs_lit = int(dimacs_lit)
+            self.current_clause.append(i_dimacs_lit)
+            var = abs(i_dimacs_lit)
             if var > self.max_variable:
                 self.max_variable = var
 
@@ -143,15 +180,38 @@ class SATSolver:
         self.assumptions.append(assumption_lit)
 
     def solve(self) -> int:
-        """模拟SAT求解，返回1（SAT）、0（UNSAT）"""
-        # 实际场景中需调用真实求解逻辑，这里简化模拟：
-        # 1. 检查是否有明显矛盾（示例：包含空子句或假设冲突）
-        # 2. 这里默认返回SAT（1），可根据需求修改
-        self.solve_result = 1  # 模拟可满足
-        # 模拟赋值：所有变量设为真（简化处理）
-        '''self.var_values = {i: 1 for i in range(1, self.max_variable + 1)}'''
-        # 清空失败假设（若之前有）
-        self.failed_assumptions.clear()
+        cnf = CNFFormula()
+        
+        for clause in self.clauses:
+            cnf.add_clause(clause)
+        
+
+        for lit in self.assumptions:
+            cnf.add_clause([lit])
+        
+
+        try:
+            status,model = cnf.solve()
+            print(status)
+        except Exception as e:
+            print(f"求解失败: {e}")
+            self.solve_result = -1
+            return -1
+        
+
+        if status == 'SAT':
+            self.solve_result = 0
+            self.var_values = model if model else {}  
+            self.failed_assumptions.clear()
+        elif status == 'UNSAT':
+            self.solve_result = 1
+            self.failed_assumptions = set(self.assumptions)
+            self.var_values.clear()
+        else:
+            self.solve_result = -1
+            self.var_values.clear()
+            self.failed_assumptions.clear()
+        
         return self.solve_result
 
     def failed(self, lit: int) -> int:

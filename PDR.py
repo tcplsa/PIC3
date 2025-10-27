@@ -69,38 +69,38 @@ def encode_init_condition(s,aig):
     s.add(0)
     for l in aig["latches"]:
         if l['current'] % 2 == 0:
-            s.add(l['current'] / 2)
+            s.add((l['current'] / 2))
             s.add(0)
         else:
-            s.add((l['current'] + 1) / 2)
+            s.add(((l['current'] + 1) / 2))
             s.add(0)
 
     if len(aig["constraints"]) >= 0:
         for l in aig["constraints"]:
-            s.add(l)
+            s.add((l))
             s.add(0)
 
         lit_set = []
         for l in aig["constraints"]:
-            lit_set.insert(abs(l));
+            lit_set.insert((abs(l)));
 
         for a in reversed(aig["ands"]):
             if a[0] in lit_set:
                 continue
-            lit_set.append(abs(a[1]));
-            lit_set.append(abs(a[2]));
+            lit_set.append((abs(a[1])));
+            lit_set.append((abs(a[2])));
 
-            s.add(-a[0])
-            s.add(a[1])
+            s.add((-a[0]))
+            s.add((a[1]))
             s.add(0)
             
-            s.add(-a[0])
-            s.add(a[2])
+            s.add((-a[0]))
+            s.add((a[2]))
             s.add(0)
             
-            s.add(a[0])
-            s.add(-a[1])
-            s.add(-a[2])
+            s.add((a[0]))
+            s.add((-a[1]))
+            s.add((-a[2]))
             s.add(0)
         
 
@@ -127,9 +127,9 @@ def is_inductive(solver, latches, gen_core, reverse_assumption = 0):
     solver.clear_act()
     assumptions = []
     act = solver.max_var() + 1
-    solver.add(-act)
+    solver.add((-act))
     for i in latches:
-        solver.add(-i)
+        solver.add((-i))
     solver.add(0)
     
     if use_heuristic == 1:
@@ -143,6 +143,7 @@ def is_inductive(solver, latches, gen_core, reverse_assumption = 0):
     for i in assumptions:
         solver.assume(i)
     status = solver.solve()
+    print(status)
     res = (status == 20)
     if res > 0 and gen_core > 0:
         core.clear()
@@ -195,10 +196,10 @@ def add_cube(cube, k ,to_all, ispropagate, prtimes):
     if to_all == True:
         for i in range(1, k):
             for l in cube:
-                frames[i].solver.add(-l)
+                frames[i].solver.add((-l))
             frames[i].solver.add(0)
     for l in cube:
-        frames[k].solver.add(-l)
+        frames[k].solver.add((-l))
     frames[k].solver.add(0)
 
 
