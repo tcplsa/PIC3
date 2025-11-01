@@ -1,6 +1,7 @@
 import subprocess
 import os
 import tempfile
+from typing import Set 
 
 state_count = 0
 class CNFFormula:
@@ -64,6 +65,7 @@ class CNFFormula:
             
             cnf_filename = cnf_file.name
             result_filename = result_file.name
+            result_filename = "result_file.txt"
         
         try:
 
@@ -122,21 +124,22 @@ class CNFFormula:
                 return 'ERROR', None
                     
         finally:
+            pass
             # 清理临时文件
             if os.path.exists(cnf_filename):
                 os.remove(cnf_filename)
-            if os.path.exists(result_filename):
-                os.remove(result_filename)
+            # if os.path.exists(result_filename):
+            #     os.remove(result_filename)
 
 class Variable:
     dimacs_var = 0
     name = ""
-    def __init__(self, dimacs_index, name = "", type = "", type_index = "", prime = 0):
+    def __init__(self, dimacs_index, name = "", type = "", type_index = 0, prime = 0):
         self.dimacs_var = dimacs_index
         self.name = name
         if type in ['i', 'o', 'l', 'a']:
             # 更新type属性为合法类型
-            self.name = type  
+            self.name = type 
             s = f"{type}{str(type_index)}"  
             if prime == 1:
                 s += "'"  
@@ -200,12 +203,13 @@ class SATSolver:
         
 
         if status == 'SAT':
-            self.solve_result = 0
+            self.solve_result = 1
             self.var_values = model if model else {}  
             self.failed_assumptions.clear()
         elif status == 'UNSAT':
-            self.solve_result = 1
-            self.failed_assumptions = set(self.assumptions)
+            self.solve_result = 0
+            self.failed_assumptions = self._find_failed_assumptions(cnf)
+            print(self.failed_assumptions)
             self.var_values.clear()
         else:
             self.solve_result = -1
@@ -213,6 +217,30 @@ class SATSolver:
             self.failed_assumptions.clear()
         
         return self.solve_result
+
+    def _find_failed_assumptions(self, base_cnf: CNFFormula) -> Set[int]:
+        """验证每个假设是否为失败文字（移除后公式变SAT）"""
+        failed = set()
+        if not self.assumptions:
+            return failed
+        
+        # 复制基础CNF（不含任何假设）
+        from copy import deepcopy
+        cnf_copy = deepcopy(base_cnf)
+        
+        for lit in self.assumptions:
+            # 构建“移除当前假设lit”的CNF：添加其他所有假设
+            temp_cnf = deepcopy(cnf_copy)
+            for other_lit in self.assumptions:
+                if other_lit != lit:
+                    temp_cnf.add_clause([other_lit])  # 添加其他假设
+            
+            # 求解：若SAT，则lit是失败假设（因为移除它后可满足）
+            status, _ = temp_cnf.solve()
+            if status == 'SAT':
+                failed.add(lit)
+        
+        return failed
 
     def failed(self, lit: int) -> int:
         """检查假设文字是否为失败文字（仅UNSAT时有效）"""
@@ -256,9 +284,17 @@ class SATSolver:
             print(f"  Assumptions: {self.assumptions}")
 
 
+class CubeCMP:
+    """Cube 的比较器（用于 set 排序，对应 C++ 的 Cube_CMP）"""
+    def __call__(self, a, b):
+        # 按文字列表排序（示例逻辑，可根据实际需求修改）
+        return tuple(a.literals) < tuple(b.literals)
+
 class Frame:
-    cubes = []
-    solver = SATSolver()
+
+    def __init__(self):
+        self.cubes = set()  
+        self.solver = SATSolver()
 
 class State:
     latches = []

@@ -148,10 +148,10 @@ def read_aig(filename):
         M, I, L, O, A = map(int, [M, I, L, O, A])
 
         
-        bad = []
-        for _ in range(O):
-            lit = int(f.readline().decode().strip())
-            bad.append(lit)
+        inputs = []
+        for _ in range(I):
+            input_val = int(f.readline().decode.strip())
+            inputs.append(input_val)
 
         
         latches = []
@@ -160,6 +160,10 @@ def read_aig(filename):
             cur = 2 * (I + i + 1)
             latches.append({"current": cur, "next": nxt})
 
+        bad = []
+        for _ in range(O):
+            lit = int(f.readline().decode().strip())
+            bad.append(lit)
         
         ands = []
         lhs = 2 * (I + L + 1)

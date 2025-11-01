@@ -2,27 +2,62 @@ from Aiger import *
 from Class import *
 from functools import cmp_to_key
 import random
+import sys
 
 frames = []
 states = []
 use_heuristic = 0
 obligation_queue = []
 core = [] #有问题
+map_to_prime = []
+num_inputs = 0
+num_latches = 0
+num_constraints = 0
+num_ands = 0
 option_ctg_tries = 1
 earliest_strengthened_frame = 0
 top_frame_cannot_reach_bad = True
 unprimed_first_dimacs = 2
+primed_first_dimacs = 0
 variables = []
+lift = None
 '''problem'''
-primed_first_dimacs = 100
+
+
 
 
 def depth():
-    return len(frames) - 1
+    return len(frames) - 2
 
 
-def prime_var(lit):
-    pass
+
+    
+def prime_var(var: int) -> int:
+    if not hasattr(prime_var, "map_to_prime"):
+        prime_var.map_to_prime = {} 
+    if not hasattr(prime_var, "map_to_unprime"):
+        prime_var.map_to_unprime = {} 
+
+    assert var >= 1, f"变量{var}必须≥1"
+    
+    if var > 1:
+        upper_bound = 1 + num_inputs + num_latches
+        if var <= upper_bound:
+            return primed_first_dimacs + var - 2
+        else:
+            if var not in prime_var.map_to_prime:
+                unprimed_var = var
+                while len(variables) <= unprimed_var:
+                    variables.append(Variable(len(variables), f"unknown_{len(variables)}"))
+                new_name = f"{variables[unprimed_var].name}'"
+                primed_var = len(variables)
+                prime_var.map_to_prime[unprimed_var] = primed_var
+                prime_var.map_to_unprime[primed_var] = unprimed_var
+                variables.append(Variable(primed_var, new_name)) 
+            
+            return prime_var.map_to_prime[var]
+    else:
+        return var
 
 def prime_lit(lit):
     if lit >= 0:
@@ -30,29 +65,109 @@ def prime_lit(lit):
     else:
         return -prime_var(-lit)
 
-
-def extract_state_from_sat(sat, s, succ, index):
+def encode_lift(lift):
     pass
 
-def get_pre_of_bad(s,aig):
+def extract_state_from_sat(sat, s, succ, index):
+    global lift
+    s.clear()
+    if lift == None:
+        lift = SATSolver()
+        encode_lift(lift)
+    lift.clear_act()
+    assumptions = []
+    latches = []
+    distance = primed_first_dimacs - ( num_inputs + num_latches + 2 )
+    for i in range (0, num_inputs):
+        ipt = sat.val(unprimed_first_dimacs + i)
+        pipt = sat.val(primed_first_dimacs + i)
+        if ipt != 0:
+            s.inputs.append(ipt)
+            assumptions.append(ipt)
+        if pipt > 0:
+            pipt = pipt - distance
+            assumptions.append(pipt)
+        elif pipt < 0:
+            pipt = -(-pipt - distance)
+            assumptions.append(pipt)
+    
+    sz = len(assumptions)
+    
+    for i in range(0, num_latches):
+        l = sat.val(unprimed_first_dimacs + num_inputs + i)
+        if l != 0:
+            latches.append(l)
+            assumptions.append(l)
+    
+    act_var = lift.max_var() + 1
+    lift.add(-act_var)
+    '''
+    for l in constraints:
+        lift.add(-l)
+    for l in constraints_prime:
+        lift.add(-l)
+    '''        
+    if succ == None:
+        lift.add(-bad_prime)
+    else:
+        for l in succ.latches:
+            lift.add(prime_lit(-l))
+    lift.add(0)
+    assumptions.sort(key=cmp_to_key(lit_cmp))
+    for i in range(0, len(assumptions)):
+        if assumptions[i] >= num_inputs + num_latches + 2:
+            assumptions[i] = assumptions[i] + distance
+        elif assumptions[i] <= - (num_inputs + num_latches + 2):
+            assumptions[i] = assumptions[i] - distance
+            
+    lift.assume(act_var)
+    for l in assumptions:
+        lift.assume(l)
+    res = lift.solve()
+    assert res == 0, f"不应为SAT"
+    
+    for l in latches:
+        if lift.failed(l):
+            s.latches.append(l)
+    '''
+    corelen = 0
+    last_index = 0
+    for i in range(0, len(assumptions)):
+        l = assumptions[i]
+        if abs(l) >= num_inputs + 2 and abs(l) <= num_inputs + num_latches + 1:
+            corelen += 1
+        if lift.failed(l):
+            last_index = corelen
+    '''
+    s.next = succ
+    lift.set_clear_act()
+    return
+
+def get_pre_of_bad(s):
     s.clear()
     Fk = depth()
     frames[Fk].solver.assume(bad_prime)
     res = frames[Fk].solver.solve()
-    res = 0
+    # for c in frames[Fk].solver.clauses:
+    #     print(c)
+ 
+    # res = 0
     SAT = 1
     if res == SAT:  
-        bad_state = State()  #
-        for i in range(0, aig["I"]):
+        # sys.exit()
+        bad_state = State()  
+        for i in range(0, num_inputs):
             pipt = frames[Fk].solver.val(primed_first_dimacs + i)
+            print("pipt = ",pipt)
             if pipt > 0:
                 bad_state.inputs.append(pipt - (primed_first_dimacs - unprimed_first_dimacs))
             elif pipt < 0:
                 bad_state.inputs.append(pipt + (primed_first_dimacs - unprimed_first_dimacs))
         
 
-        for i in range(0, aig["L"]):
-            l_val = frames[Fk].solver.val(primed_first_dimacs + aig["I"] + i)
+        for i in range(0, num_latches):
+            l_val = frames[Fk].solver.val(primed_first_dimacs + num_inputs + i)
+            print("l = ",l_val)
             if l_val > 0:
                 bad_state.latches.append(l_val - (primed_first_dimacs - unprimed_first_dimacs))
             elif l_val < 0:
@@ -68,11 +183,13 @@ def encode_init_condition(s,aig):
     s.add(-1)
     s.add(0)
     for l in aig["latches"]:
-        if l['current'] % 2 == 0:
-            s.add((l['current'] / 2))
+        if 1 == 0:
+            s.add(int((l['current'] / 2)+1))
+            # print(int((l['current'] / 2)+1))
             s.add(0)
         else:
-            s.add(((l['current'] + 1) / 2))
+            s.add(int(-((l['current']) / 2)-1))
+            # print(int(-((l['current']) / 2)-1))
             s.add(0)
 
     if len(aig["constraints"]) >= 0:
@@ -187,6 +304,7 @@ def CTG_down():
 
 
 def add_cube(cube, k ,to_all, ispropagate, prtimes):
+    global earliest_strengthened_frame
     if ispropagate == False:
         earliest_strengthened_frame =min(earliest_strengthened_frame,k)
     cube.sort(key = lambda x:abs(x))
@@ -343,37 +461,73 @@ def propagate():
 def initialize(aig):  #把aig转化为cnf
     return convert_ands_to_clauses(aig["ands"])
 
+def aiger_to_dimacs(lit):
+    res = lit >> 1
+    if lit & 1 == 1:
+        return -res-1
+    else:
+        return res+1
 
 def new_frame():     #创建新的帧
+    last = len(frames)
     frame =  Frame()
     frames.append(frame)
+    encode_translation(frames[last].solver)
     
 def translate_to_dimacs(aig):
+    global bad_prime 
+    global primed_first_dimacs
     variables.append(Variable(0,"NULL"))
     variables.append(Variable(1,"False"))
     
-    for i in range(1,aig["I"] + 1):
-        variables.append(Variable(1 + i,'i',i-1, 0))
+    for i in range(1, num_inputs + 1):
+        variables.append(Variable(1 + i, None, 'i', i-1, 0))
 
-    for i in range(1,aig["L"] + 1):
-        variables.append(Variable(1 + aig["I"] + i,'l',i-1, 0))
+    for i in range(1, num_latches + 1):
+        variables.append(Variable(1 + num_inputs + i, None, 'l', i-1, 0))
     
-    for i in range(1, aig["A"] + 1):
-        variables.append(Variable(1 + aig["I"] + aig["L"] + i,'a',i-1, 0))
+    for i in range(1, num_ands + 1):
+        variables.append(Variable(1 + num_inputs + num_latches + i, None, 'a', i-1, 0))
     
-    bad = aig["bad"][0]
-    global bad_prime 
+    primed_first_dimacs = len(variables)
+    assert primed_first_dimacs == 1 + num_inputs + num_latches + num_ands + 1, f"primed_first_dimacs长度不匹配"
+    
+    for i in range(0, num_inputs):
+        variables.append(Variable(primed_first_dimacs + i, None, 'i', i, 1))
+        
+    for i in range(0, num_latches):
+        variables.append(Variable(primed_first_dimacs + num_inputs + i, None, 'l', i, 1))
+    
+    bad = aiger_to_dimacs(aig["bad"][0])
     bad_prime = prime_lit(bad)
     '''
     constraint
     '''
+    # for var in variables:
+    #     print(var.name)
+
 
     
 def pdr_main(aig):
+    global num_inputs
+    global num_latches
+    global num_constraints
+    global num_ands
+    global earliest_strengthened_frame
+    global top_frame_cannot_reach_bad
+    num_inputs = aig["I"]
+    num_latches = aig["L"]
+    num_ands = aig["A"]
     clauses = initialize(aig)
     translate_to_dimacs(aig)
     new_frame() #初始帧
-    encode_init_condition(frames[len(frames)-1].solver,aig)
+    encode_init_condition(frames[0].solver,aig)
+    new_frame()
+    print("-----------------------------")
+    for c in frames[1].solver.clauses:
+        print(c)
+    new_frame()
+    assert depth() == 1, f"深度应该为1"
     top_frame_cannot_reach_bad = True
     earliest_strengthened_frame = depth()
     result = 10
@@ -381,11 +535,11 @@ def pdr_main(aig):
     cnt = 0
     while True:
         cnt += 1
-        if cnt > 1000000:  #强制退出协议
+        if cnt > 10:  #强制退出协议
             break
         
         s = State()   #全状态
-        flag = get_pre_of_bad(s,aig)
+        flag = get_pre_of_bad(s)
         if flag == True:   #如果存在义务
             obligation_queue.clear() #清空义务列表
             obligation_queue.append(Obligation(s, depth()-1, 1)) #加入新义务
@@ -397,6 +551,7 @@ def pdr_main(aig):
                 for p in states:
                     del p
         else:   #没有义务就看看能不能结束
+            assert len(obligation_queue) == 0, f"存在未完成的义务"
             if propagate() == True:  #能结束就退出
                 result =20
                 break
