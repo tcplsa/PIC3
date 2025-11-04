@@ -21,6 +21,7 @@ unprimed_first_dimacs = 2
 primed_first_dimacs = 0
 variables = []
 lift = None
+satelite = None
 '''problem'''
 
 
@@ -227,7 +228,12 @@ def is_init(latches):
     
 
 def encode_translation(s):
-    pass
+    global satelite
+    if satelite == None:
+        satelite = SATSolver()
+        
+        
+        
     
 def lit_cmp(a: int, b: int) -> int:
     abs_a = abs(a)
