@@ -94,12 +94,29 @@ def read_aag(filename):
 
         # 读取锁存器部分（L个条目，每个条目占1行，每行2个整数）
         latches = []
-        for _ in range(L):
-            cur, nxt = map(int, f.readline().strip().split())
-            latches.append({
-                "current": cur, 
-                "next": nxt
-            })
+        for i in range(L):  # 用i跟踪索引，方便计算默认current（如果需要）
+            # 读取一行，去除空白并分割为参数列表
+            line = f.readline().strip()
+            if not line:  # 处理空行（如果有）
+                raise ValueError("latches行不能为空")
+            parts = line.split()  # 按空格分割，支持多空格/tab分隔
+            parts = [int(p) for p in parts]  # 转换为整数
+            
+            # 根据参数数量处理
+            if len(parts) == 2:
+                cur = 2 * (I + i + 1)
+                
+                nxt, default_val = parts
+                latches.append({"current": cur, "next": nxt, "default": default_val})
+            elif len(parts) == 1:
+                # 情况2：1个参数 → 仅next，current需要手动计算（参考你之前的逻辑）
+                nxt = parts[0]
+                # 假设current的计算方式为：2*(I + i + 1)（根据你的业务逻辑调整）
+                cur = 2 * (I + i + 1)
+                latches.append({"current": cur, "next": nxt, "default": 0})
+            else:
+                # 异常情况：参数数量不对（既不是1也不是2）
+                raise ValueError(f"latches行格式错误：'{line}'，需1或2个参数")
 
         # 读取输出部分（O个条目，每个条目占1行）
         bad = []
@@ -156,9 +173,20 @@ def read_aig(filename):
         
         latches = []
         for i in range(L):
-            nxt = int(f.readline().decode().strip())
+            line = f.readline().decode().strip()
+            parts = line.split()
+            parts = [int(p) for p in parts]
+            
             cur = 2 * (I + i + 1)
-            latches.append({"current": cur, "next": nxt})
+            
+            if len(parts) == 1:
+                nxt = parts[0]
+                latches.append({"current": cur, "next": nxt, "default": 0})
+            elif len(parts) == 2:
+                nxt, default_val = parts
+                latches.append({"current": cur, "next": nxt, "default": default_val})
+            else:
+                raise ValueError(f"latches行格式错误：{line}（需1或2个参数）")
 
         bad = []
         for _ in range(O):

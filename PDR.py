@@ -7,9 +7,12 @@ import sys
 frames = []
 states = []
 use_heuristic = 0
+bad = 0
 obligation_queue = []
 core = [] #有问题
 map_to_prime = []
+init_state = []
+nexts = []
 num_inputs = 0
 num_latches = 0
 num_constraints = 0
@@ -20,8 +23,10 @@ top_frame_cannot_reach_bad = True
 unprimed_first_dimacs = 2
 primed_first_dimacs = 0
 variables = []
+ands = []
 lift = None
 satelite = None
+satelite2 = None
 '''problem'''
 
 
@@ -67,7 +72,8 @@ def prime_lit(lit):
         return -prime_var(-lit)
 
 def encode_lift(lift):
-    pass
+    global satelite2
+    encode_translation(lift,satelite2)
 
 def extract_state_from_sat(sat, s, succ, index):
     global lift
@@ -111,9 +117,10 @@ def extract_state_from_sat(sat, s, succ, index):
     if succ == None:
         lift.add(-bad_prime)
     else:
-        for l in succ.latches:
+        for l in succ.latches: 
             lift.add(prime_lit(-l))
     lift.add(0)
+    print("aaa")
     assumptions.sort(key=cmp_to_key(lit_cmp))
     for i in range(0, len(assumptions)):
         if assumptions[i] >= num_inputs + num_latches + 2:
@@ -153,26 +160,31 @@ def get_pre_of_bad(s):
     #     print(c)
  
     # res = 0
+    print(res)
     SAT = 1
     if res == SAT:  
         # sys.exit()
         bad_state = State()  
         for i in range(0, num_inputs):
             pipt = frames[Fk].solver.val(primed_first_dimacs + i)
-            print("pipt = ",pipt)
+            # print(pipt)
             if pipt > 0:
                 bad_state.inputs.append(pipt - (primed_first_dimacs - unprimed_first_dimacs))
+                print("pipt add = ",pipt - (primed_first_dimacs - unprimed_first_dimacs))
             elif pipt < 0:
                 bad_state.inputs.append(pipt + (primed_first_dimacs - unprimed_first_dimacs))
+                print("pipt add = ",pipt + (primed_first_dimacs - unprimed_first_dimacs))
         
 
         for i in range(0, num_latches):
             l_val = frames[Fk].solver.val(primed_first_dimacs + num_inputs + i)
-            print("l = ",l_val)
+            # print(l_val)
             if l_val > 0:
                 bad_state.latches.append(l_val - (primed_first_dimacs - unprimed_first_dimacs))
+                print("l add = ",l_val - (primed_first_dimacs - unprimed_first_dimacs))
             elif l_val < 0:
                 bad_state.latches.append(l_val + (primed_first_dimacs - unprimed_first_dimacs))
+                print("l add = ",l_val + (primed_first_dimacs - unprimed_first_dimacs))
         
         extract_state_from_sat(frames[Fk].solver, s, None, Fk)  
         s.next = bad_state  
@@ -220,20 +232,109 @@ def encode_init_condition(s,aig):
             s.add((-a[1]))
             s.add((-a[2]))
             s.add(0)
-        
+    print("add_cls finish load init")
 
 def is_init(latches):
     '''to be finish'''
     return False
     
 
-def encode_translation(s):
-    global satelite
+def encode_translation(s,satelite):
     if satelite == None:
         satelite = SATSolver()
+        satelite.var_enlarge_to(len(variables)-1)
+        for i in range(1, num_inputs + num_latches + 1):
+            satelite.freeze_var(1 + i)
+            satelite.freeze_var(prime_var(1 + i))
+        satelite.freeze_var(abs(bad))
+        satelite.freeze_var(abs(bad_prime))
+        '''
+        constraints
+        '''
+        prime_lit_set = set()
+        prime_lit_set.add(abs(bad))
+        '''
+        constrains
+        '''
+        lit_set = prime_lit_set.copy()
+        for l in nexts:
+            lit_set.add(abs(l))
+            
+        satelite.add(-1)
+        satelite.add(0)
+        #print(-bad)
+        satelite.add(-bad)
+        satelite.add(0)
+        '''
+        constraints
+        '''
+        for i in range(0, num_latches):
+            l = 1 + num_inputs + i + 1
+            pl = prime_lit(l)
+            next = nexts[i]
+            #print(-pl," ",next)
+            satelite.add(-pl)
+            satelite.add(next)
+            satelite.add(0)
+            #print(-next," ",pl)
+            satelite.add(-next)
+            satelite.add(pl)
+            satelite.add(0)
         
+        #print(lit_set)
+        for a in reversed(ands):
+
+            assert a[0] > 0, f"And门输出a[0]必须为正数，实际为{a[0]}"
         
-        
+            if a[0] in lit_set:
+                lit_set.add(abs(a[1]))
+                lit_set.add(abs(a[2]))
+                
+                #print(-a[0]," ",a[1])
+                satelite.add(-a[0])
+                satelite.add(a[1])
+                satelite.add(0)  
+                
+                #print(-a[0]," ",a[2])
+                satelite.add(-a[0])
+                satelite.add(a[2])
+                satelite.add(0) 
+                
+                #print(a[0]," ",-a[1]," ",-a[2])
+                satelite.add(a[0])
+                satelite.add(-a[1])
+                satelite.add(-a[2])
+                satelite.add(0)  
+                
+                if a[0] in prime_lit_set:
+                    po = prime_lit(a[0])
+                    pi1 = prime_lit(a[1])
+                    pi2 = prime_lit(a[2])
+                    
+                    prime_lit_set.add(abs(a[1]))
+                    prime_lit_set.add(abs(a[2]))
+                    
+                    #print(-po," ",pi1)
+                    satelite.add(-po)
+                    satelite.add(pi1)
+                    satelite.add(0)  
+                    
+                    #print(-po," ",pi2)
+                    satelite.add(-po)
+                    satelite.add(pi2)
+                    satelite.add(0) 
+                    
+                    #print(po," ",-pi1," ",-pi2)
+                    satelite.add(po)
+                    satelite.add(-pi1)
+                    satelite.add(-pi2)
+                    satelite.add(0) 
+        satelite.simplify()
+        #satelite.show_simplified_cnf()
+    for l in satelite.simplified_cnf:
+        s.add(l)
+    print("add_cls finish load trnasition")
+    
     
 def lit_cmp(a: int, b: int) -> int:
     abs_a = abs(a)
@@ -474,14 +575,16 @@ def aiger_to_dimacs(lit):
     else:
         return res+1
 
-def new_frame():     #创建新的帧
+def new_frame(aig):     #创建新的帧
     last = len(frames)
     frame =  Frame()
     frames.append(frame)
-    encode_translation(frames[last].solver)
+    global satelite
+    encode_translation(frames[last].solver,satelite)
     
 def translate_to_dimacs(aig):
     global bad_prime 
+    global bad
     global primed_first_dimacs
     variables.append(Variable(0,"NULL"))
     variables.append(Variable(1,"False"))
@@ -493,7 +596,23 @@ def translate_to_dimacs(aig):
         variables.append(Variable(1 + num_inputs + i, None, 'l', i-1, 0))
     
     for i in range(1, num_ands + 1):
+        o = 1 + num_inputs + num_latches + i
+        i1 = aiger_to_dimacs(aig["ands"][i-1][1])
+        i2 = aiger_to_dimacs(aig["ands"][i-1][2])
         variables.append(Variable(1 + num_inputs + num_latches + i, None, 'a', i-1, 0))
+        ands.append([o,i1,i2])
+    
+    
+    for i in range(1, num_latches + 1):
+        l = 1 + num_inputs + i
+        assert (l-1)*2 == aig["latches"][i-1]["current"], f"不匹配"
+        al = aig["latches"][i-1]
+        nexts.append(aiger_to_dimacs(al["next"]))
+        if al["default"] == 0:
+            init_state.append(-l)
+        elif al["default"] == 1:
+            init_state.append(l)
+        
     
     primed_first_dimacs = len(variables)
     assert primed_first_dimacs == 1 + num_inputs + num_latches + num_ands + 1, f"primed_first_dimacs长度不匹配"
@@ -526,13 +645,12 @@ def pdr_main(aig):
     num_ands = aig["A"]
     clauses = initialize(aig)
     translate_to_dimacs(aig)
-    new_frame() #初始帧
+    new_frame(aig) #初始帧
     encode_init_condition(frames[0].solver,aig)
-    new_frame()
-    print("-----------------------------")
+    new_frame(aig)
     for c in frames[1].solver.clauses:
         print(c)
-    new_frame()
+    new_frame(aig)
     assert depth() == 1, f"深度应该为1"
     top_frame_cannot_reach_bad = True
     earliest_strengthened_frame = depth()
@@ -561,7 +679,7 @@ def pdr_main(aig):
             if propagate() == True:  #能结束就退出
                 result =20
                 break
-            new_frame()  #不能结束就进下一层
+            new_frame(aig)  #不能结束就进下一层
             top_frame_cannot_reach_bad = True
             earliest_strengthened_frame = depth()
     return result

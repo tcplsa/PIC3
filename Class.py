@@ -156,13 +156,19 @@ class SATSolver:
         self.current_clause = []
         self.assumptions = []
         self.max_variable = 0
+        self.simplified_cnf = []
         try:
-            self.lib = ctypes.CDLL("./IC3/libminisat_wrapper.so")
+            # 使用绝对路径加载（避免相对路径陷阱）
+            lib_path = os.path.abspath("./IC3/libminisat_wrapper.so")
+            self.lib = ctypes.CDLL(lib_path)
             self._setup_lib_functions()
             self.solver = self.lib.minisat_create()
-            self.backend = "minisat"  # 使用 C++ 后端
-        except:
-            print("init err")
+            self.backend = "minisat"
+        except Exception as e:
+            # 打印详细错误（如文件不存在、符号缺失等）
+            print(f"初始化错误：{str(e)}")
+            # 可选：如果加载失败，终止程序（避免后续错误）
+            raise  # 抛出异常，停止执行
         
         # 通用常量
         self.SAT = 1
@@ -173,6 +179,7 @@ class SATSolver:
         self.solve_result = self.UNKNOWN
         self.var_values = {}
         self.failed_assumptions = []
+        self.clear_flag = False
     
     def _setup_lib_functions(self):
         """设置 C++ 库函数原型"""
@@ -190,7 +197,14 @@ class SATSolver:
         self.lib.minisat_clear_assumptions.argtypes = [ctypes.c_void_p]
         self.lib.minisat_get_failed_assumptions.argtypes = [ctypes.c_void_p, ctypes.POINTER(ctypes.c_int)]
         self.lib.minisat_get_failed_assumptions.restype = ctypes.POINTER(ctypes.c_int)
-    
+        self.lib.minisat_var_enlarge_to.argtypes = [ctypes.c_void_p, ctypes.c_int]
+        self.lib.minisat_var_enlarge_to.restype = None
+        self.lib.minisat_simplify.argtypes = [ctypes.c_void_p, ctypes.POINTER(ctypes.c_int)]
+        self.lib.minisat_simplify.restype = ctypes.POINTER(ctypes.c_int)
+        self.lib.minisat_free_simplified_cnf.argtypes = [ctypes.POINTER(ctypes.c_int)]
+        self.lib.minisat_free_simplified_cnf.restype = None
+        self.lib.minisat_perform_simplify.argtypes = [ctypes.c_void_p]
+        self.lib.minisat_perform_simplify.restype = None
     # def _setup_python_backend(self):
     #     """设置纯 Python 后端"""
     #     self.clauses = []
@@ -203,6 +217,72 @@ class SATSolver:
         if hasattr(self, 'solver') and self.solver and self.backend == "minisat":
             self.lib.minisat_destroy(self.solver)
     
+    def simplify(self) -> List[int]:
+
+        if self.backend != "minisat":
+            print("Warning: simplify only supported for minisat backend")
+            return []
+        
+        # 调用 C++ 后端的简化函数
+        out_size = ctypes.c_int()
+        simplified_ptr = self.lib.minisat_simplify(self.solver, ctypes.byref(out_size))
+        
+        # 将结果转换为 Python 列表
+        self.simplified_cnf = []
+        if out_size.value > 0:
+            self.simplified_cnf = [simplified_ptr[i] for i in range(out_size.value)]
+            
+            # 释放 C++ 端分配的内存
+            self.lib.minisat_free_simplified_cnf(simplified_ptr)
+        
+        return self.simplified_cnf
+    
+    def perform_simplify(self) -> None:
+        """
+        仅执行简化，不获取简化后的 CNF（性能更好）
+        适用于只需要简化效果而不需要获取具体 CNF 的场景
+        """
+        if self.backend == "minisat":
+            self.lib.minisat_perform_simplify(self.solver)
+    
+    def get_simplified_cnf(self) -> List[int]:
+        """获取上次简化后的 CNF"""
+        return self.simplified_cnf.copy()
+    
+    def show_simplified_cnf(self) -> None:
+        """显示简化后的 CNF"""
+        if not self.simplified_cnf:
+            print("No simplified CNF available. Call simplify() first.")
+            return
+        
+        print("Simplified CNF:")
+        clause = []
+        for lit in self.simplified_cnf:
+            if lit == 0:
+                if clause:
+                    print("  " + " ".join(str(l) for l in clause))
+                    clause = []
+            else:
+                clause.append(lit)
+        
+        # 打印最后一个子句（如果有）
+        if clause:
+            print("  " + " ".join(str(l) for l in clause))
+    
+    
+    def var_enlarge_to(self, v: int) -> None:
+        """
+        扩展变量到至少 v 个（确保变量索引 1 到 v 都存在）
+        参数 v: 目标变量数量（DIMACS 格式，从 1 开始）
+        """
+        if self.backend == "minisat":
+            # 调用 C++ 后端的变量扩展函数
+            self.lib.minisat_var_enlarge_to(self.solver, v)
+        
+        # 更新 Python 端的最大变量记录
+        if v > self.max_variable:
+            self.max_variable = v
+            
     def add(self, dimacs_lit: int) -> bool:
         """
         添加文字到当前子句，0 表示子句结束
@@ -313,9 +393,9 @@ class SATSolver:
         
         var_value = self.var_values[var]
         if lit > 0:
-            return 1 if var_value else -1
+            return lit if var_value else -lit
         else:
-            return -1 if var_value else 1
+            return -lit if var_value else lit
     
     def failed(self, lit: int) -> int:
         """
@@ -333,7 +413,7 @@ class SATSolver:
         else:
             return self.max_variable
     
-    def clear_act(self) -> None:
+    def act(self) -> None:
         """清除假设和临时状态"""
         self.assumptions.clear()
         self.current_clause.clear()
@@ -343,6 +423,20 @@ class SATSolver:
         
         if self.backend == "minisat":
             self.lib.minisat_clear_assumptions(self.solver)
+           
+    def clear_act(self) -> None:
+
+        # 条件性添加约束（与 C++ 版本行为一致）
+        if self.clear_flag:
+            max_var = self.max_var()
+            if max_var > 0:
+                # 添加 [-max_var] 单文字子句
+                self.add(-max_var)
+                self.add(0)  # 结束子句
+            self.clear_flag = False       
+            
+    def set_clear_act(self) -> None:
+        clear_flag = True
     
     def add_clause(self, clause: List[int]) -> bool:
         """直接添加完整子句（备选接口）"""
