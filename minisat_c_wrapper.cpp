@@ -55,7 +55,7 @@ public:
         return failed_assumptions;
     }
     
-    bool solveWithAssumptions() {
+    bool solveWithAssumptions(bool simp = true) {
         // 在求解前再次确保所有假设变量被冻结
         for (int i = 0; i < custom_assumptions.size(); i++) {
             Var v = var(custom_assumptions[i]);
@@ -63,14 +63,15 @@ public:
         }
         
         failed_assumptions.clear();
-        bool result = solve(custom_assumptions);
+        bool result = solve(custom_assumptions,simp);
+        // printf("Solver result: %s\n", result ? "SAT" : "UNSAT");
         
         // 如果UNSAT，分析冲突以找出失败假设
         if (!result && conflict.size() > 0) {
             // 从冲突子句中提取失败的假设
             for (int i = 0; i < conflict.size(); i++) {
                 Lit conflict_lit = conflict[i];
-                
+                // printf("Conflict literal: var=%d, sign=%d\n", var(conflict_lit), sign(conflict_lit));
                 // 检查这个冲突文字是否在假设中
                 for (int j = 0; j < custom_assumptions.size(); j++) {
                     Lit assumption_lit = custom_assumptions[j];
@@ -135,9 +136,9 @@ extern "C" bool minisat_add_clause(MinisatSolver solver, int* lits, int len) {
 }
 
 // 求解
-extern "C" int minisat_solve(MinisatSolver solver) {
+extern "C" int minisat_solve(MinisatSolver solver, bool simp) {
     ExtendedSimpSolver* s = static_cast<ExtendedSimpSolver*>(solver);
-    bool result = s->solveWithAssumptions();
+    bool result = s->solveWithAssumptions(simp);
     return result ? SAT : UNSAT;
 }
 
@@ -272,8 +273,53 @@ extern "C" void minisat_free_simplified_cnf(int* cnf) {
     delete[] cnf;
 }
 
+
+extern "C" int* minisat_get_raw_cnf(MinisatSolver solver, int* out_size) {
+    ExtendedSimpSolver* s = static_cast<ExtendedSimpSolver*>(solver);
+    
+    // 收集原始 CNF，不执行简化
+    static std::vector<int> raw_cnf;
+    raw_cnf.clear();
+    
+    // 添加变量数量信息
+    raw_cnf.push_back(s->nVars());
+    raw_cnf.push_back(-s->nVars());
+    raw_cnf.push_back(0);
+    
+    // 收集所有子句
+    for (Minisat::ClauseIterator c = s->clausesBegin(); 
+         c != s->clausesEnd(); ++c) {
+        const Minisat::Clause & cls = *c;
+        for (int i = 0; i < cls.size(); ++i) {
+            int v = Minisat::var(cls[i]) + 1;
+            int l = Minisat::sign(cls[i]) ? -v : v;
+            raw_cnf.push_back(l);
+        }
+        raw_cnf.push_back(0);
+    }
+    
+    // 收集单位子句（trail）
+    for (Minisat::TrailIterator c = s->trailBegin(); 
+         c != s->trailEnd(); ++c) {
+        int v = Minisat::var(*c) + 1;
+        int l = Minisat::sign(*c) ? -v : v;
+        raw_cnf.push_back(l);
+        raw_cnf.push_back(0);
+    }
+    
+    *out_size = raw_cnf.size();
+    
+    // 返回数据
+    int* result = new int[raw_cnf.size()];
+    std::copy(raw_cnf.begin(), raw_cnf.end(), result);
+    return result;
+}
+
 // 仅执行简化，不获取结果（性能更好）
 extern "C" void minisat_perform_simplify(MinisatSolver solver) {
     ExtendedSimpSolver* s = static_cast<ExtendedSimpSolver*>(solver);
     s->eliminate();
 }
+
+//g++ -shared -fPIC -o ./IC3/libminisat_wrapper.so ./IC3/minisat_c_wrapper.cpp  ./IC3/minisat/minisat/simp/SimpSolver.cc ./IC3/minisat/minisat/utils/System.cc ./IC3/minisat/minisat/core/Solver.cc  -I./IC3/minisat -lstdc++
+//rm -f /home/lyj238/wdl/IC3/libminisat_wrapper.so

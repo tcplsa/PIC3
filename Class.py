@@ -134,8 +134,6 @@ state_count = 0
 #             #     os.remove(result_filename)
 
 class Variable:
-    dimacs_var = 0
-    name = ""
     def __init__(self, dimacs_index, name = "", type = "", type_index = 0, prime = 0):
         self.dimacs_var = dimacs_index
         self.name = name
@@ -187,7 +185,7 @@ class SATSolver:
         self.lib.minisat_destroy.argtypes = [ctypes.c_void_p]
         self.lib.minisat_add_clause.argtypes = [ctypes.c_void_p, ctypes.POINTER(ctypes.c_int), ctypes.c_int]
         self.lib.minisat_add_clause.restype = ctypes.c_bool
-        self.lib.minisat_solve.argtypes = [ctypes.c_void_p]
+        self.lib.minisat_solve.argtypes = [ctypes.c_void_p, ctypes.c_bool]
         self.lib.minisat_solve.restype = ctypes.c_int
         self.lib.minisat_set_assumptions.argtypes = [ctypes.c_void_p, ctypes.POINTER(ctypes.c_int), ctypes.c_int]
         self.lib.minisat_model_value.argtypes = [ctypes.c_void_p, ctypes.c_int]
@@ -205,6 +203,8 @@ class SATSolver:
         self.lib.minisat_free_simplified_cnf.restype = None
         self.lib.minisat_perform_simplify.argtypes = [ctypes.c_void_p]
         self.lib.minisat_perform_simplify.restype = None
+        self.lib.minisat_get_raw_cnf.argtypes = [ctypes.c_void_p, ctypes.POINTER(ctypes.c_int)]
+        self.lib.minisat_get_raw_cnf.restype = ctypes.POINTER(ctypes.c_int)
     # def _setup_python_backend(self):
     #     """设置纯 Python 后端"""
     #     self.clauses = []
@@ -289,13 +289,36 @@ class SATSolver:
         返回是否成功添加
         """
         if dimacs_lit == 0:
+            # print("add_cls: ", end="")
+
+            # # 遍历clause中的每个文字编码
+            # for code in self.current_clause:
+            #     # 解析变量索引（0-based）和符号
+            #     var_0based = code // 2  # 提取变量（0-based）
+            #     sign = code % 2         # 提取符号（1表示负文字，0表示正文字）
+                
+            #     # 转换为1-based变量编号
+            #     var_1based = var_0based + 1
+                
+            #     # 计算DIMACS格式的文字（带符号）
+            #     lit = -var_1based if sign else var_1based
+                
+            #     # 打印当前文字（不换行，用空格分隔）
+            #     print(lit, end=" ")
+
+            # # 打印换行，结束当前子句输出
+            # print()
             return self._minisat_add_current_clause()
         else:
             self.current_clause.append(dimacs_lit)
+            var = abs(dimacs_lit)
+            if var > self.max_variable:
+                self.max_variable = var
             return True
     
     def _minisat_add_current_clause(self) -> bool:
         """MiniSat 后端：添加当前子句"""
+        self.clauses.append(self.current_clause.copy())
         if not self.current_clause:
             return False
             
@@ -319,22 +342,23 @@ class SATSolver:
         """添加假设文字"""
         self.assumptions.append(assumption_lit)
     
-    def solve(self) -> int:
-        return self._minisat_solve()
+    def solve(self, simplify: bool = True) -> int:
+        return self._minisat_solve(simplify)
     
-    def _minisat_solve(self) -> int:
+    def _minisat_solve(self, simplify: bool = True) -> int:
         """MiniSat 后端求解"""
         # 设置假设
         if self.assumptions:
+            self.lib.minisat_clear_assumptions(self.solver)
             arr = (ctypes.c_int * len(self.assumptions))()
             for i, lit in enumerate(self.assumptions): 
                 arr[i] = lit
             self.lib.minisat_set_assumptions(self.solver, arr, len(self.assumptions))
         else:
             self.lib.minisat_clear_assumptions(self.solver)
-        
+        self.assumptions.clear()
         # 求解
-        result = self.lib.minisat_solve(self.solver)
+        result = self.lib.minisat_solve(self.solver, ctypes.c_bool(simplify))
         
         if result == 10:  # SAT
             self.solve_result = self.SAT
@@ -345,6 +369,7 @@ class SATSolver:
             self.var_values.clear()
             self._minisat_get_failed_assumptions()
         else:
+            print("wrong")
             self.solve_result = self.UNKNOWN
             self.var_values.clear()
             self.failed_assumptions.clear()
@@ -456,17 +481,103 @@ class SATSolver:
         if self.backend == "minisat" and hasattr(self.lib, 'minisat_unfreeze_var'):
             self.lib.minisat_unfreeze_var(self.solver, var - 1)
     
-    def show_info(self) -> None:
+    
+    def get_raw_cnf(self) -> List[int]:
+        """
+        获取原始 CNF 子句（不执行简化）
+        返回格式与 simplify() 相同，但不执行实际的简化操作
+        """
+        if self.backend != "minisat":
+            return []
+        
+        out_size = ctypes.c_int()
+        raw_cnf_ptr = self.lib.minisat_get_raw_cnf(self.solver, ctypes.byref(out_size))
+        
+        raw_cnf = []
+        if out_size.value > 0:
+            raw_cnf = [raw_cnf_ptr[i] for i in range(out_size.value)]
+            
+            # 释放 C++ 端分配的内存
+            self.lib.minisat_free_simplified_cnf(raw_cnf_ptr)
+        
+        return raw_cnf
+    
+    def show_raw_cnf(self) -> None:
+        """以可读格式显示原始 CNF"""
+        raw_cnf = self.get_raw_cnf()
+        if not raw_cnf:
+            print("No raw CNF available.")
+            return
+        
+        print("Raw CNF (without simplification):")
+        clause = []
+        clause_num = 1
+        for lit in raw_cnf:
+            if lit == 0:
+                if clause:
+                    # 跳过变量数量信息行 (nVars, -nVars, 0)
+                    if len(clause) == 3 and clause[0] > 0 and clause[1] == -clause[0] and clause[2] == 0:
+                        print(f"  Variables: {clause[0]}")
+                    else:
+                        print(f"  Clause {clause_num}: {' '.join(str(l) for l in clause)}")
+                        clause_num += 1
+                    clause = []
+            else:
+                clause.append(lit)
+        
+        # 打印最后一个子句（如果有）
+        if clause:
+            print(f"  Clause {clause_num}: {' '.join(str(l) for l in clause)}")
+    
+    def get_clauses(self) -> List[List[int]]:
+        """
+        获取原始 CNF 子句列表
+        返回: 子句列表，每个子句是一个文字列表
+        """
+        raw_cnf = self.get_raw_cnf()
+        clauses = []
+        current_clause = []
+        
+        for lit in raw_cnf:
+            if lit == 0:
+                if current_clause:
+                    # 跳过变量数量信息行 (nVars, -nVars, 0)
+                    if len(current_clause) != 3 or not (current_clause[0] > 0 and current_clause[1] == -current_clause[0] and current_clause[2] == 0):
+                        clauses.append(current_clause.copy())
+                    current_clause.clear()
+            else:
+                current_clause.append(lit)
+        
+        # 添加最后一个子句（如果有）
+        if current_clause:
+            clauses.append(current_clause)
+        
+        return clauses
+    
+    def show_info(self, show_cnf: bool = False) -> None:
         """显示求解器信息"""
         print(f"SAT Solver Info:")
         print(f"  Backend: {self.backend}")
         print(f"  Max variable: {self.max_var()}")
         status_map = {self.SAT: 'SAT', self.UNSAT: 'UNSAT', self.UNKNOWN: 'Unknown'}
         print(f"  Solve result: {status_map[self.solve_result]}")
+        for assume in self.assumptions:
+            print("assume:",assume)
+        # for i, clause in enumerate(self.clauses):
+        #     print(f"clause {i}:", clause)
+        raw_clauses = self.get_clauses()
+        for i, clause in enumerate(raw_clauses):
+            print(f"clause {i}:", clause)
+        
+        if show_cnf:
+            raw_clauses = self.get_clauses()
+            for i, clause in enumerate(raw_clauses):
+                print(f"raw clause {i}:", clause)
         if self.solve_result == self.SAT:
             print(f"  Model size: {len(self.var_values)}")
         elif self.solve_result == self.UNSAT:
-            print(f"  Failed assumptions: {len(self.failed_assumptions)}")
+            print(f"  Failed assumptions: ", self.failed_assumptions)
+        print(self.var_values)
 
 # class SATSolver:
 #     def __init__(self):
@@ -612,6 +723,8 @@ class CubeCMP:
         # 按文字列表排序（示例逻辑，可根据实际需求修改）
         return tuple(a.literals) < tuple(b.literals)
 
+
+
 class Frame:
 
     def __init__(self):
@@ -619,38 +732,37 @@ class Frame:
         self.solver = SATSolver()
 
 class State:
-    latches = []
-    inputs = []
+    # 移除类属性的 latches 和 inputs（类属性会被所有实例共享，此处不需要）
     index = 0
     failed = 0
     failed_depth = 0
+    next = None
 
-
-    def __init__(self,latches = [],inputs = []):
+    def __init__(self, latches=None, inputs=None):
         global state_count 
         state_count += 1
         self.index = state_count
-        self.latches = latches
-        self.inputs = inputs
+        # 每个实例创建独立的列表（避免共享）
+        self.latches = latches.copy() if latches is not None else []
+        self.inputs = inputs.copy() if inputs is not None else []
         
     def clear(self):
-        pass
+        self.latches.clear()  # 现在只清空当前实例的列表
+        self.inputs.clear()
+        self.next = None
         
 class Obligation:
-    state = None
-    frame_k = 0
-    depth = 0
+    # 类属性可以省略（除非需要所有实例共享默认值，这里不需要）
     def __init__(self, s, k, d):
-        state = s
-        frame_k = k
-        depth = d
+        self.state = s       # 绑定到实例：self.xxx
+        self.frame_k = k     # 绑定到实例
+        self.depth = d       # 绑定到实例
     
-    def __lt__(self,other):
+    def __lt__(self, other):
+        # 现在可以正确访问实例属性
         if self.frame_k < other.frame_k:
             return True
         if self.frame_k > other.frame_k:
             return False
-        if self.depth < other.depth:
-            return True
-        if self.depth >= other.depth:
-            return False
+        # 帧号相同时，比较深度
+        return self.depth < other.depth  # 简化逻辑
