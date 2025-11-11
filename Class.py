@@ -278,6 +278,7 @@ class SATSolver:
         if self.backend == "minisat":
             # 调用 C++ 后端的变量扩展函数
             self.lib.minisat_var_enlarge_to(self.solver, v)
+            # self.lib.minisat_var_enlarge_to(self.solver, 1000)
         
         # 更新 Python 端的最大变量记录
         if v > self.max_variable:

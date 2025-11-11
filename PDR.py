@@ -107,13 +107,15 @@ def encode_lift(lift):
     encode_translation(lift,satelite2)
 
 def extract_state_from_sat(sat, s, succ, index):
+    print("extract_state_from_sat")
     global lift
     s.clear()
     if lift == None:
         lift = SATSolver()
         encode_lift(lift)
     lift.clear_act()
-
+    # print("lift")
+    # lift.show_info()
     assumptions = []
     latches = []
     distance = primed_first_dimacs - ( num_inputs + num_latches + 2 )
@@ -141,7 +143,7 @@ def extract_state_from_sat(sat, s, succ, index):
     act_var = lift.max_var() + 1
     
     lift.add(-act_var)
-    
+
     '''
     for l in constraints:
         lift.add(-l)
@@ -154,6 +156,9 @@ def extract_state_from_sat(sat, s, succ, index):
         for l in succ.latches: 
             lift.add(prime_lit(-l))
     lift.add(0)
+    print("lift add")
+    lift.show_info()
+    
     assumptions.sort(key=cmp_to_key(lit_cmp))
     for i in range(0, len(assumptions)):
         if assumptions[i] >= num_inputs + num_latches + 2:
@@ -188,9 +193,11 @@ def extract_state_from_sat(sat, s, succ, index):
     '''
     s.next = succ
     lift.set_clear_act()
+    print("end extract_state_from_sat")
     return
 
 def get_pre_of_bad(s):
+    print("get pre of bad")
     global bad_prime
     s.clear()
     Fk = depth()
@@ -200,7 +207,8 @@ def get_pre_of_bad(s):
     frames[Fk].solver.assume(bad_prime)
     
     res = frames[Fk].solver.solve(False)
-    frames[Fk].solver.show_info()
+    
+    # frames[Fk].solver.show_info()
     
     # for c in frames[Fk].solver.clauses:
     #     print(c)
@@ -217,10 +225,10 @@ def get_pre_of_bad(s):
             # print(pipt)
             if pipt > 0:
                 bad_state.inputs.append(pipt - (primed_first_dimacs - unprimed_first_dimacs))
-                print("pipt add = ",pipt - (primed_first_dimacs - unprimed_first_dimacs))
+                # print("pipt add = ",pipt - (primed_first_dimacs - unprimed_first_dimacs))
             elif pipt < 0:
                 bad_state.inputs.append(pipt + (primed_first_dimacs - unprimed_first_dimacs))
-                print("pipt add = ",pipt + (primed_first_dimacs - unprimed_first_dimacs))
+                # print("pipt add = ",pipt + (primed_first_dimacs - unprimed_first_dimacs))
         
 
         for i in range(0, num_latches):
@@ -228,17 +236,18 @@ def get_pre_of_bad(s):
             # print(l_val)
             if l_val > 0:
                 bad_state.latches.append(l_val - (primed_first_dimacs - unprimed_first_dimacs))
-                print("l add = ",l_val - (primed_first_dimacs - unprimed_first_dimacs))
+                # print("l add = ",l_val - (primed_first_dimacs - unprimed_first_dimacs))
             elif l_val < 0:
                 bad_state.latches.append(l_val + (primed_first_dimacs - unprimed_first_dimacs))
-                
-                print("l add = ",l_val + (primed_first_dimacs - unprimed_first_dimacs))
+                # print("l add = ",l_val + (primed_first_dimacs - unprimed_first_dimacs))
         extract_state_from_sat(frames[Fk].solver, s, None, Fk)  
         s.next = bad_state
         print(s.next.latches) 
-        show_state(s) 
+        # show_state(s) 
+        print("end get pre of bad")
         return True
     else:  
+        print("end get pre of bad")
         return False
     
 def encode_init_condition(s,aig):
@@ -402,6 +411,7 @@ def lit_cmp(a: int, b: int) -> int:
         return -1 if a < b else 1 if a > b else 0
 
 def is_inductive(aig,solver, latches, gen_core, reverse_assumption = False):
+    print("is_inductive")
     global core
     solver.clear_act()
     solver.set_clear_act()
@@ -424,7 +434,8 @@ def is_inductive(aig,solver, latches, gen_core, reverse_assumption = False):
         solver.assume(i)
     # solver.show_info()
     status = solver.solve(False)
-    solver.show_info()
+    print("is_inductive")
+    # solver.show_info()
     
     res = (status == 0)
     if res == True and gen_core == True:
@@ -437,6 +448,7 @@ def is_inductive(aig,solver, latches, gen_core, reverse_assumption = False):
                 core = latches
     
     print("core: ",core)
+    print("end is_inductive")
     return res
 
 
@@ -494,6 +506,7 @@ def add_cube(cube, k ,to_all, ispropagate, prtimes):
 
 
 def rec_block_cube(aig):
+    print("rec_block_cube")
     states = []
     ct = 0
     cnt = 0
@@ -578,6 +591,7 @@ def rec_block_cube(aig):
                 s.next = obl.state
                 cex_state_idx = s
                 find_cex = True
+                print("end rec_block_cube")
                 return False   # 返回求解结果
 
             else:
@@ -586,6 +600,7 @@ def rec_block_cube(aig):
                 # 向义务队列插入新义务
                 new_obligation = Obligation(s, obl.frame_k - 1, obl.depth + 1)
                 obligation_queue.append(new_obligation)  # 假设用 append 插入队列
+    print("end rec_block_cube")
     return True
 
 
@@ -773,6 +788,7 @@ def pdr_main(aig):
     new_frame() #初始帧
     
     encode_init_condition(frames[0].solver,aig)
+    # frames[0].solver.show_info()
     new_frame()
     # for c in frames[1].solver.clauses:
     #     print("c: ",c)
