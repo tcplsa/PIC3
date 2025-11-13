@@ -156,8 +156,8 @@ def extract_state_from_sat(sat, s, succ, index):
         for l in succ.latches: 
             lift.add(prime_lit(-l))
     lift.add(0)
-    print("lift add")
-    lift.show_info()
+    # print("lift add")
+    # lift.show_info()
     
     assumptions.sort(key=cmp_to_key(lit_cmp))
     for i in range(0, len(assumptions)):
@@ -208,7 +208,7 @@ def get_pre_of_bad(s):
     
     res = frames[Fk].solver.solve(False)
     
-    # frames[Fk].solver.show_info()
+    frames[Fk].solver.show_info()
     
     # for c in frames[Fk].solver.clauses:
     #     print(c)
@@ -435,7 +435,7 @@ def is_inductive(aig,solver, latches, gen_core, reverse_assumption = False):
     # solver.show_info()
     status = solver.solve(False)
     print("is_inductive")
-    # solver.show_info()
+    solver.show_info()
     
     res = (status == 0)
     if res == True and gen_core == True:

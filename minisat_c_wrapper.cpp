@@ -321,5 +321,5 @@ extern "C" void minisat_perform_simplify(MinisatSolver solver) {
     s->eliminate();
 }
 
-//g++ -shared -fPIC -o ./IC3/libminisat_wrapper.so ./IC3/minisat_c_wrapper.cpp  ./IC3/minisat/minisat/simp/SimpSolver.cc ./IC3/minisat/minisat/utils/System.cc ./IC3/minisat/minisat/core/Solver.cc  -I ./IC3/minisat -lstdc++
-//rm -f /home/lyj238/wdl/IC3/libminisat_wrapper.so
+//g++ -shared -fPIC -o ./libminisat_wrapper.so ./minisat_c_wrapper.cpp  ./minisat/minisat/simp/SimpSolver.cc ./minisat/minisat/utils/System.cc ./minisat/minisat/core/Solver.cc  -I ./minisat -lstdc++
+//rm -f ./libminisat_wrapper.so

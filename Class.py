@@ -157,7 +157,7 @@ class SATSolver:
         self.simplified_cnf = []
         try:
             # 使用绝对路径加载（避免相对路径陷阱）
-            lib_path = os.path.abspath("./IC3/libminisat_wrapper.so")
+            lib_path = os.path.abspath("./libminisat_wrapper.so")
             self.lib = ctypes.CDLL(lib_path)
             self._setup_lib_functions()
             self.solver = self.lib.minisat_create()
