@@ -108,12 +108,15 @@ def encode_lift(lift):
 
 def extract_state_from_sat(sat, s, succ, index):
     print("extract_state_from_sat")
+
     global lift
     s.clear()
     if lift == None:
         lift = SATSolver()
         encode_lift(lift)
+    print("clear_flag",lift.clear_flag)
     lift.clear_act()
+    print()
     # print("lift")
     # lift.show_info()
     assumptions = []
@@ -141,6 +144,7 @@ def extract_state_from_sat(sat, s, succ, index):
             assumptions.append(l)
     
     act_var = lift.max_var() + 1
+    print("act_var", act_var)
     
     lift.add(-act_var)
 
@@ -157,7 +161,7 @@ def extract_state_from_sat(sat, s, succ, index):
             lift.add(prime_lit(-l))
     lift.add(0)
     # print("lift add")
-    # lift.show_info()
+    
     
     assumptions.sort(key=cmp_to_key(lit_cmp))
     for i in range(0, len(assumptions)):
@@ -169,9 +173,9 @@ def extract_state_from_sat(sat, s, succ, index):
     lift.assume(act_var)
     for l in assumptions:
         lift.assume(l)
-    
-    res = lift.solve(False)
     # lift.show_info()
+    res = lift.solve(False)
+    lift.show_info()
     assert res == 0, f"不应为SAT"
     print("lift:")
     for l in assumptions:
@@ -208,7 +212,7 @@ def get_pre_of_bad(s):
     
     res = frames[Fk].solver.solve(False)
     
-    frames[Fk].solver.show_info()
+    # frames[Fk].solver.show_info()
     
     # for c in frames[Fk].solver.clauses:
     #     print(c)
@@ -411,7 +415,7 @@ def lit_cmp(a: int, b: int) -> int:
         return -1 if a < b else 1 if a > b else 0
 
 def is_inductive(aig,solver, latches, gen_core, reverse_assumption = False):
-    print("is_inductive")
+    print("start is_inductive")
     global core
     solver.clear_act()
     solver.set_clear_act()
@@ -434,8 +438,7 @@ def is_inductive(aig,solver, latches, gen_core, reverse_assumption = False):
         solver.assume(i)
     # solver.show_info()
     status = solver.solve(False)
-    print("is_inductive")
-    solver.show_info()
+    # solver.show_info()
     
     res = (status == 0)
     if res == True and gen_core == True:
@@ -520,6 +523,7 @@ def rec_block_cube(aig):
         sat = frames[obl.frame_k].solver
         print("fk:", obl.frame_k)
         if is_inductive(aig, sat, obl.state.latches, True)  == True:
+            print("successfully block cube")
             del obligation_queue[0]
             tmp_core = core
             generalize(tmp_core, obl.frame_k, 1)
@@ -548,6 +552,7 @@ def rec_block_cube(aig):
             if k <= depth() and pushpo:  #应为pushpo，未解决
                 obligation_queue.append(Obligation(obl.state, k, obl.depth))
         else:
+            print("block cube failed")
             if cnt > 5:
                 return False
             if obl.state.failed_depth and obl.state.failed_depth <= obl.depth + obl.frame_k:

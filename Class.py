@@ -153,6 +153,7 @@ class SATSolver:
         self.clauses = []
         self.current_clause = []
         self.assumptions = []
+        self.pre_assumptions = []
         self.max_variable = 0
         self.simplified_cnf = []
         try:
@@ -344,6 +345,8 @@ class SATSolver:
         self.assumptions.append(assumption_lit)
     
     def solve(self, simplify: bool = True) -> int:
+        for assume in self.assumptions:
+            self.pre_assumptions.append(assume)
         return self._minisat_solve(simplify)
     
     def _minisat_solve(self, simplify: bool = True) -> int:
@@ -462,7 +465,7 @@ class SATSolver:
             self.clear_flag = False       
             
     def set_clear_act(self) -> None:
-        clear_flag = True
+        self.clear_flag = True
     
     def add_clause(self, clause: List[int]) -> bool:
         """直接添加完整子句（备选接口）"""
@@ -562,13 +565,16 @@ class SATSolver:
         print(f"  Max variable: {self.max_var()}")
         status_map = {self.SAT: 'SAT', self.UNSAT: 'UNSAT', self.UNKNOWN: 'Unknown'}
         print(f"  Solve result: {status_map[self.solve_result]}")
-        for assume in self.assumptions:
+        for assume in self.pre_assumptions:
             print("assume:",assume)
         # for i, clause in enumerate(self.clauses):
         #     print(f"clause {i}:", clause)
         raw_clauses = self.get_clauses()
         for i, clause in enumerate(raw_clauses):
             print(f"clause {i}:", clause)
+            
+        # for i, clause in enumerate(self.clauses):
+        #     print(f"clause {i}:", clause)
         
         if show_cnf:
             raw_clauses = self.get_clauses()
@@ -579,6 +585,7 @@ class SATSolver:
         elif self.solve_result == self.UNSAT:
             print(f"  Failed assumptions: ", self.failed_assumptions)
         print(self.var_values)
+        self.pre_assumptions.clear()
 
 # class SATSolver:
 #     def __init__(self):
