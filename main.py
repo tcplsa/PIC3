@@ -12,7 +12,7 @@ def get_file_extension(file_path):
 
 def main(args):
     # filepath = args[0]
-    filepath = "./test.aig"
+    filepath = "./test.aag"
     filename,ext = get_file_extension(filepath)
     print("filename=",filename)
     print("fileext=",ext)

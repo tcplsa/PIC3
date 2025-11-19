@@ -18,6 +18,7 @@ num_latches = 0
 num_constraints = 0
 num_ands = 0
 option_ctg_tries = 1
+nkobl = 0
 earliest_strengthened_frame = 0
 top_frame_cannot_reach_bad = True
 unprimed_first_dimacs = 2
@@ -114,7 +115,7 @@ def extract_state_from_sat(sat, s, succ, index):
     if lift == None:
         lift = SATSolver()
         encode_lift(lift)
-    print("clear_flag",lift.clear_flag)
+    # print("clear_flag",lift.clear_flag)
     lift.clear_act()
     print()
     # print("lift")
@@ -173,9 +174,8 @@ def extract_state_from_sat(sat, s, succ, index):
     lift.assume(act_var)
     for l in assumptions:
         lift.assume(l)
-    # lift.show_info()
     res = lift.solve(False)
-    lift.show_info()
+    # lift.show_info()
     assert res == 0, f"不应为SAT"
     print("lift:")
     for l in assumptions:
@@ -212,7 +212,7 @@ def get_pre_of_bad(s):
     
     res = frames[Fk].solver.solve(False)
     
-    # frames[Fk].solver.show_info()
+    frames[Fk].solver.show_info()
     
     # for c in frames[Fk].solver.clauses:
     #     print(c)
@@ -229,10 +229,10 @@ def get_pre_of_bad(s):
             # print(pipt)
             if pipt > 0:
                 bad_state.inputs.append(pipt - (primed_first_dimacs - unprimed_first_dimacs))
-                # print("pipt add = ",pipt - (primed_first_dimacs - unprimed_first_dimacs))
+                print("pipt add = ",pipt - (primed_first_dimacs - unprimed_first_dimacs))
             elif pipt < 0:
                 bad_state.inputs.append(pipt + (primed_first_dimacs - unprimed_first_dimacs))
-                # print("pipt add = ",pipt + (primed_first_dimacs - unprimed_first_dimacs))
+                print("pipt add = ",pipt + (primed_first_dimacs - unprimed_first_dimacs))
         
 
         for i in range(0, num_latches):
@@ -247,7 +247,7 @@ def get_pre_of_bad(s):
         extract_state_from_sat(frames[Fk].solver, s, None, Fk)  
         s.next = bad_state
         print(s.next.latches) 
-        # show_state(s) 
+        show_state(s) 
         print("end get pre of bad")
         return True
     else:  
@@ -267,33 +267,33 @@ def encode_init_condition(s,aig):
             # print(int(-((l['current']) / 2)-1))
             s.add(0)
 
-    if len(aig["constraints"]) > 0:
-        for l in aig["constraints"]:
-            s.add((l))
-            s.add(0)
+    # if len(aig["constraints"]) > 0:
+    #     for l in aig["constraints"]:
+    #         s.add((l))
+    #         s.add(0)
 
-        lit_set = []
-        for l in aig["constraints"]:
-            lit_set.insert((abs(l)));
+    #     lit_set = []
+    #     for l in aig["constraints"]:
+    #         lit_set.insert((abs(l)));
 
-        for a in reversed(aig["ands"]):
-            if a[0] in lit_set:
-                continue
-            lit_set.append((abs(a[1])));
-            lit_set.append((abs(a[2])));
+    #     for a in reversed(aig["ands"]):
+    #         if a[0] in lit_set:
+    #             continue
+    #         lit_set.append((abs(a[1])));
+    #         lit_set.append((abs(a[2])));
 
-            s.add((-a[0]))
-            s.add((a[1]))
-            s.add(0)
+    #         s.add((-a[0]))
+    #         s.add((a[1]))
+    #         s.add(0)
             
-            s.add((-a[0]))
-            s.add((a[2]))
-            s.add(0)
+    #         s.add((-a[0]))
+    #         s.add((a[2]))
+    #         s.add(0)
             
-            s.add((a[0]))
-            s.add((-a[1]))
-            s.add((-a[2]))
-            s.add(0)
+    #         s.add((a[0]))
+    #         s.add((-a[1]))
+    #         s.add((-a[2]))
+    #         s.add(0)
     print("add_cls finish load init")
 
 def is_init(latches,aig):
@@ -436,19 +436,17 @@ def is_inductive(aig,solver, latches, gen_core, reverse_assumption = False):
     solver.assume(act)
     for i in assumptions:
         solver.assume(i)
-    # solver.show_info()
     status = solver.solve(False)
-    # solver.show_info()
-    
+    solver.show_info()
     res = (status == 0)
     if res == True and gen_core == True:
         core.clear()
         for i in latches:
             if solver.failed(prime_lit(i)):
-                # print("i:",prime_lit(i))
                 core.append(i)
             if is_init(core,aig):
-                core = latches
+                core = latches.copy()
+                break
     
     print("core: ",core)
     print("end is_inductive")
@@ -506,14 +504,18 @@ def add_cube(cube, k ,to_all, ispropagate, prtimes):
     for l in cube:
         frames[k].solver.add((-l))
     frames[k].solver.add(0)
+    for i in range(1, k + 1):
+        print("Frame", i, "now has", len(frames[i].cubes), "cubes.")
 
 
 def rec_block_cube(aig):
+    global nkobl
     print("rec_block_cube")
     states = []
     ct = 0
     cnt = 0
     while len(obligation_queue) != 0:
+        obligation_queue.sort()
         cnt += 1
         # '''测试代码'''
         # if ct == 0: 
@@ -529,9 +531,13 @@ def rec_block_cube(aig):
             generalize(tmp_core, obl.frame_k, 1)
             # print("tmp_core: ",tmp_core)
             # generalize(tmp_core, obl.frame_k, 1)
+            key = 0
             for k in range(obl.frame_k + 1, depth() + 1):
                 if is_inductive(aig, frames[k].solver, tmp_core, False) == False:
+                    key = 1
                     break
+            if key == 0:
+                k += 1
             pushpo = False
             la = obl.state.latches
             for ci in frames[k].cubes:
@@ -549,13 +555,14 @@ def rec_block_cube(aig):
                     nkobl += 1
                     break  # 找到匹配后跳出循环
             add_cube(tmp_core, k, True, False, k - obl.frame_k + (1 if (len(tmp_core) < len(core)) else 0))
-            if k <= depth() and pushpo:  #应为pushpo，未解决
+            if k <= depth() and pushpo:  
                 obligation_queue.append(Obligation(obl.state, k, obl.depth))
         else:
             print("block cube failed")
-            if cnt > 5:
+            if cnt > 1000:
                 return False
             if obl.state.failed_depth and obl.state.failed_depth <= obl.depth + obl.frame_k:
+                obligation_queue.sort()
                 # 移除队列首个元素
                 if obligation_queue:
                     obligation_queue.pop(0)  # 假设是列表，pop(0) 移除首个元素
@@ -566,6 +573,7 @@ def rec_block_cube(aig):
 
             # 第二个条件判断：检查失败次数和深度
             if obl.state.failed >= 5 and (obl.depth + obl.frame_k) > depth():
+                obligation_queue.sort()
                 # 移除队列首个元素
                 if obligation_queue:
                     obligation_queue.pop(0)
@@ -605,12 +613,14 @@ def rec_block_cube(aig):
                 # 向义务队列插入新义务
                 new_obligation = Obligation(s, obl.frame_k - 1, obl.depth + 1)
                 obligation_queue.append(new_obligation)  # 假设用 append 插入队列
+                obligation_queue.sort()
     print("end rec_block_cube")
     return True
 
 
 
 def propagate(aig):
+    global bad
     start_k = 1
     if top_frame_cannot_reach_bad == True:
         start_k = depth()
@@ -645,7 +655,9 @@ def propagate(aig):
                 badcube = []  # 假设Cube类已定义
                 badcube.clear()    # 清空cube
                 badcube.append(bad)
-                frames[i+1].cubes.add(badcube)  # 假设用set存储cubes，使用add方法
+                badcube_tuple = tuple(badcube)
+                frames[i+1].cubes.add(badcube_tuple)
+                # frames[i+1].cubes.add(badcube)  # 假设用set存储cubes，使用add方法
                 
                 # 处理约束条件
                 # for l in constraints:
@@ -793,7 +805,6 @@ def pdr_main(aig):
     new_frame() #初始帧
     
     encode_init_condition(frames[0].solver,aig)
-    # frames[0].solver.show_info()
     new_frame()
     # for c in frames[1].solver.clauses:
     #     print("c: ",c)
@@ -807,7 +818,7 @@ def pdr_main(aig):
     cnt = 0
     while True:
         cnt += 1
-        if cnt > 100:  #强制退出协议
+        if cnt > 1000:  #强制退出协议
             break
         
         s = State()   #全状态

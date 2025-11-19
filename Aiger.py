@@ -103,7 +103,11 @@ def read_aag(filename):
             parts = [int(p) for p in parts]  # 转换为整数
             
             # 根据参数数量处理
-            if len(parts) == 2:
+            if len(parts) == 3:
+                # 情况1：3个参数 → current, next, default
+                cur, nxt, default_val = parts
+                latches.append({"current": cur, "next": nxt, "default": default_val})
+            elif len(parts) == 2:
                 cur = 2 * (I + i + 1)
                 
                 nxt, default_val = parts
@@ -116,7 +120,7 @@ def read_aag(filename):
                 latches.append({"current": cur, "next": nxt, "default": 0})
             else:
                 # 异常情况：参数数量不对（既不是1也不是2）
-                raise ValueError(f"latches行格式错误：'{line}'，需1或2个参数")
+                raise ValueError(f"latches行格式错误：'{line}'，需1到2个参数")
 
         # 读取输出部分（O个条目，每个条目占1行）
         bad = []
