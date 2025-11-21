@@ -569,9 +569,9 @@ class SATSolver:
             print("assume:",assume)
         # for i, clause in enumerate(self.clauses):
         #     print(f"clause {i}:", clause)
-        # raw_clauses = self.get_clauses()
-        # for i, clause in enumerate(raw_clauses):
-        #     print(f"clause {i}:", clause)
+        raw_clauses = self.get_clauses()
+        for i, clause in enumerate(raw_clauses):
+            print(f"clause {i}:", clause)
             
         # for i, clause in enumerate(self.clauses):
         #     print(f"clause {i}:", clause)

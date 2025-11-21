@@ -82,10 +82,14 @@ def read_aag(filename):
     with open(filename, "r", encoding="utf-8") as f:
         # 读取头部信息并解析
         header = f.readline().strip()
-        typ, M, I, L, O, A = header.split()
-        assert typ == "aag", f"不是有效的AAG文件，头部标识应为'aag'，实际为'{typ}'"
-        M, I, L, O, A = map(int, [M, I, L, O, A])
-
+        header_fields = header.split()
+        if len(header_fields) < 6:
+            raise ValueError(f"头部字段不足，至少需6个，实际{len(header_fields)}个")
+        if header_fields[0] != "aag":
+            raise ValueError(f"头部标识错误，应为'aag'，实际'{header_fields[0]}'")
+        M, I, L, O, A = map(int, header_fields[1:6])
+        extended_fields = list(map(int, header_fields[6:10]))
+        B, C, J, F = (extended_fields + [0]*4)[:4]
         # 读取输入部分（I个条目，每个条目占1行）
         inputs = []
         for _ in range(I):
@@ -123,11 +127,21 @@ def read_aag(filename):
                 raise ValueError(f"latches行格式错误：'{line}'，需1到2个参数")
 
         # 读取输出部分（O个条目，每个条目占1行）
-        bad = []
+        output = []
         for _ in range(O):
             output_val = int(f.readline().strip())
-            bad.append(output_val)
+            output.append(output_val)
 
+        bad = []
+        for _ in range(B):
+            lit = int(f.readline().strip())
+            bad.append(lit)
+        
+        constraints = []
+        for _ in range(C):
+            lit = int(f.readline().strip())
+            constraints.append(lit)
+        
         # 读取AND门部分（A个条目，每个条目占1行，每行3个整数）
         ands = []
         for _ in range(A):
@@ -137,12 +151,17 @@ def read_aag(filename):
             lhs, rhs0, rhs1 = parts
             ands.append((lhs, rhs0, rhs1))
 
+        if len(bad) == 0:
+            bad = output.copy()
+        
         # 返回解析后的字典结构
         return {
-            "M": M, "I": I, "L": L, "O": O, "A": A,
+            "M": M, "I": I, "L": L, "O": O, "A": A, "B": B, "C": C,
             "inputs": inputs,
             "latches": latches,
+            "output": output,
             "ands": ands,
+            "constraints": constraints,
             "bad": bad
         }
     
@@ -164,9 +183,17 @@ def read_aig(filename):
 
     with open(filename, "rb") as f:
         header = f.readline().decode().strip()
-        typ, M, I, L, O, A = header.split()
-        assert typ == "aig"
-        M, I, L, O, A = map(int, [M, I, L, O, A])
+        header_fields = header.split()
+        if len(header_fields) < 6:
+            raise ValueError(f"头部字段不足，至少需6个，实际{len(header_fields)}个")
+        if header_fields[0] != "aig":
+            raise ValueError(f"头部标识错误，应为'aig'，实际'{header_fields[0]}'")
+        M, I, L, O, A = map(int, header_fields[1:6])
+        extended_fields = list(map(int, header_fields[6:10]))
+        B, C, J, F = (extended_fields + [0]*4)[:4]
+        # typ, M, I, L, O, A = header.split()
+        # assert typ == "aig"
+        # M, I, L, O, A = map(int, [M, I, L, O, A])
 
         
         inputs = []
@@ -192,10 +219,20 @@ def read_aig(filename):
             else:
                 raise ValueError(f"latches行格式错误：{line}（需1或2个参数）")
 
-        bad = []
+        output = []
         for _ in range(O):
+            output_val = int(f.readline().decode().strip())
+            output.append(output_val)
+
+        bad = []
+        for _ in range(B):
             lit = int(f.readline().decode().strip())
             bad.append(lit)
+        
+        constraints = []
+        for _ in range(C):
+            lit = int(f.readline().decode().strip())
+            constraints.append(lit)
         
         ands = []
         lhs = 2 * (I + L + 1)
@@ -207,12 +244,14 @@ def read_aig(filename):
             ands.append((lhs, rhs0, rhs1))
             lhs += 2
         '''to be finished'''
-        constraints = []
+        if len(bad) == 0:
+            bad = output.copy()
         
         return {
-            "M": M, "I": I, "L": L, "O": O, "A": A,
+            "M": M, "I": I, "L": L, "O": O, "A": A, "B": B, "C": C,
             "inputs": [2*(i+1) for i in range(I)],
             "latches": latches,
+            "output": output,
             "ands": ands,
             "constraints": constraints,
             "bad": bad  

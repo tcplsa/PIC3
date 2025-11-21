@@ -25,6 +25,8 @@ unprimed_first_dimacs = 2
 primed_first_dimacs = 0
 variables = []
 ands = []
+constraints_prime = []
+constraints = []
 lift = None
 init = None
 satelite = None
@@ -149,12 +151,12 @@ def extract_state_from_sat(sat, s, succ, index):
     
     lift.add(-act_var)
 
-    '''
+    
     for l in constraints:
         lift.add(-l)
     for l in constraints_prime:
         lift.add(-l)
-    '''        
+            
     if succ == None:
         lift.add(-bad_prime)
     else:
@@ -212,7 +214,7 @@ def get_pre_of_bad(s):
     
     res = frames[Fk].solver.solve(False)
     
-    frames[Fk].solver.show_info()
+    # frames[Fk].solver.show_info()
     
     # for c in frames[Fk].solver.clauses:
     #     print(c)
@@ -255,45 +257,46 @@ def get_pre_of_bad(s):
         return False
     
 def encode_init_condition(s,aig):
+    
     s.add(-1)
     s.add(0)
     for l in aig["latches"]:
-        if l == 0:
+        if l['default'] != 0:
             s.add(int((l['current'] / 2)+1))
-            # print(int((l['current'] / 2)+1))
+            print(int((l['current'] / 2)+1))
             s.add(0)
         else:
             s.add(int(-((l['current']) / 2)-1))
-            # print(int(-((l['current']) / 2)-1))
+            print(int(-((l['current']) / 2)-1))
             s.add(0)
 
-    # if len(aig["constraints"]) > 0:
-    #     for l in aig["constraints"]:
-    #         s.add((l))
-    #         s.add(0)
+    if len(aig["constraints"]) >= 0:
+        for l in aig["constraints"]:
+            s.add((l))
+            s.add(0)
 
-    #     lit_set = []
-    #     for l in aig["constraints"]:
-    #         lit_set.insert((abs(l)));
+        lit_set = []
+        for l in aig["constraints"]:
+            lit_set.insert((abs(l)));
 
-    #     for a in reversed(aig["ands"]):
-    #         if a[0] in lit_set:
-    #             continue
-    #         lit_set.append((abs(a[1])));
-    #         lit_set.append((abs(a[2])));
+        for a in reversed(aig["ands"]):
+            if a[0] not in lit_set:
+                continue
+            lit_set.append((abs(a[1])));
+            lit_set.append((abs(a[2])));
 
-    #         s.add((-a[0]))
-    #         s.add((a[1]))
-    #         s.add(0)
+            s.add((-a[0]))
+            s.add((a[1]))
+            s.add(0)
             
-    #         s.add((-a[0]))
-    #         s.add((a[2]))
-    #         s.add(0)
+            s.add((-a[0]))
+            s.add((a[2]))
+            s.add(0)
             
-    #         s.add((a[0]))
-    #         s.add((-a[1]))
-    #         s.add((-a[2]))
-    #         s.add(0)
+            s.add((a[0]))
+            s.add((-a[1]))
+            s.add((-a[2]))
+            s.add(0)
     print("add_cls finish load init")
 
 def is_init(latches,aig):
@@ -308,7 +311,7 @@ def is_init(latches,aig):
     return res == 1
     
 
-def encode_translation(s,satelite):
+def encode_translation(s,satelite,cons = False):
     if satelite == None:
         satelite = SATSolver()
         satelite.var_enlarge_to(len(variables)-1)
@@ -317,14 +320,15 @@ def encode_translation(s,satelite):
             satelite.freeze_var(prime_var(1 + i))
         satelite.freeze_var(abs(bad))
         satelite.freeze_var(abs(bad_prime))
-        '''
-        constraints
-        '''
+        
+        for i in range(0, num_constraints):
+            satelite.freeze_var(abs(constraints[i]))
+            satelite.freeze_var(prime_var(abs(constraints[i])))
+        
         prime_lit_set = set()
         prime_lit_set.add(abs(bad))
-        '''
-        constrains
-        '''
+        for l in constraints:
+            prime_lit_set.add(abs(l))
         lit_set = prime_lit_set.copy()
         for l in nexts:
             lit_set.add(abs(l))
@@ -334,9 +338,13 @@ def encode_translation(s,satelite):
         #print(-bad)
         satelite.add(-bad)
         satelite.add(0)
-        '''
-        constraints
-        '''
+        satelite_unsat = False
+        if cons == True:
+            for l in constraints:
+                if l == bad:
+                    satelite_unsat = True
+                satelite.add((l))
+                satelite.add(0)
         for i in range(0, num_latches):
             l = 1 + num_inputs + i + 1
             pl = prime_lit(l)
@@ -400,6 +408,9 @@ def encode_translation(s,satelite):
 
     for l in satelite.simplified_cnf:
         s.add(l)
+    if satelite_unsat == True:
+        s.add(1)
+        s.add(0)
     print("add_cls finish load transition")
     
     
@@ -437,7 +448,7 @@ def is_inductive(aig,solver, latches, gen_core, reverse_assumption = False):
     for i in assumptions:
         solver.assume(i)
     status = solver.solve(False)
-    solver.show_info()
+    # solver.show_info()
     res = (status == 0)
     if res == True and gen_core == True:
         core.clear()
@@ -660,10 +671,10 @@ def propagate(aig):
                 # frames[i+1].cubes.add(badcube)  # 假设用set存储cubes，使用add方法
                 
                 # 处理约束条件
-                # for l in constraints:
-                #     badcube.clear()
-                #     badcube.append(-l)
-                #     frames[i+1].cubes.add(badcube)
+                for l in constraints:
+                    badcube.clear()
+                    badcube.append(-l)
+                    frames[i+1].cubes.add(tuple(badcube))
                 
                 
                 # 处理证书输出
@@ -738,6 +749,9 @@ def new_frame():     #创建新的帧
     frames.append(frame)
     global satelite
     encode_translation(frames[last].solver,satelite)
+    for l in constraints_prime:
+        frames[last].solver.add(l)
+        frames[last].solver.add(0)
     
 def translate_to_dimacs(aig):
     global bad_prime 
@@ -770,6 +784,9 @@ def translate_to_dimacs(aig):
         elif al["default"] == 1:
             init_state.append(l)
         
+    for i in range(0, num_constraints):
+        cst = aig["constraints"][i]
+        constraints.append(aiger_to_dimacs(cst))
     
     primed_first_dimacs = len(variables)
     assert primed_first_dimacs == 1 + num_inputs + num_latches + num_ands + 1, f"primed_first_dimacs长度不匹配"
@@ -779,6 +796,10 @@ def translate_to_dimacs(aig):
         
     for i in range(0, num_latches):
         variables.append(Variable(primed_first_dimacs + num_inputs + i, None, 'l', i, 1))
+    
+    for i in range(0, num_constraints):
+        pl = prime_lit(constraints[i])
+        constraints_prime.append(pl)
     
     bad = aiger_to_dimacs(aig["bad"][0])
     bad_prime = prime_lit(bad)
