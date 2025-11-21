@@ -570,8 +570,15 @@ class SATSolver:
         # for i, clause in enumerate(self.clauses):
         #     print(f"clause {i}:", clause)
         raw_clauses = self.get_clauses()
-        for i, clause in enumerate(raw_clauses):
-            print(f"clause {i}:", clause)
+        # with open("raw_clauses.txt", "w") as f:
+        #     for i, clause in enumerate(raw_clauses):
+        #         f.write(f"clause {i}: {' '.join(map(str, clause))}\n")
+                
+        with open("clauses.txt", "w") as f:
+            for i, clause in enumerate(self.clauses):
+                f.write(f"clause {i}: {' '.join(map(str, clause))}\n")        
+        # for i, clause in enumerate(raw_clauses):
+        #     print(f"clause {i}:", clause)
             
         # for i, clause in enumerate(self.clauses):
         #     print(f"clause {i}:", clause)

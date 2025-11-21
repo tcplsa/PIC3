@@ -1,0 +1,91 @@
+aig 353 3 41 0 309 1 2
+108 8
+114 10
+120 12
+122 14
+138 16
+146 18
+154 20
+166 22
+200
+204
+208
+212
+216
+220
+224
+228
+232
+236
+240
+244
+248
+252
+256
+55
+538 56
+544 58
+550 60
+556 62
+562 64
+568 66
+574 68
+580 70
+586 72
+592 74
+598 76
+604 78
+610 80
+616 82
+622 84
+624 86
+637 88
+672
+88
+707
+LPTTYWXbPe[fhlppl%‰h-‘4d‡"7rvz~‚†Š’–š¢¦ªª	¦¢š!– '’&-,3Š29†8?‚>E~DKzJQvPÇV«¯³·»¿ÃÇËÏÓ×Ûßãå	áİÙÕ!Ñ 'Í&-É,3Å2¾;Á:ÄC½BI¹HOµNÒÄ#¾"&/4:@FLRXXÆÄÂÀ
+¾¼º¸¶´²°®¬¬Ê%®-°5² $=´*.E¶48M¸>BUºHL]¼RVe¾\`mÀfjuÂpt}Äz~…Æ„ˆÈÈ‘—! /.£=<©KJ¯YXµgf»utÁƒ‚Ç‘ÍŸÓ­¬Ù»ºßÉÊÈå™PÜàää‘óÊÎÑÕÙİáåéíñõùı™ıœûíñõùı…‰‘•™¡¶¶i0 clk
+i1 in
+i2 rst
+l0 fair_instance.bit_counter[3]
+l1 fair_instance.bit_counter[2]
+l2 fair_instance.bit_counter[1]
+l3 fair_instance.bit_counter[0]
+l4 fair_instance.one_counter[3]
+l5 fair_instance.one_counter[2]
+l6 fair_instance.one_counter[1]
+l7 fair_instance.one_counter[0]
+l8 state_counter[15]
+l9 state_counter[14]
+l10 state_counter[13]
+l11 state_counter[12]
+l12 state_counter[11]
+l13 state_counter[10]
+l14 state_counter[9]
+l15 state_counter[8]
+l16 state_counter[7]
+l17 state_counter[6]
+l18 state_counter[5]
+l19 state_counter[4]
+l20 state_counter[3]
+l21 state_counter[2]
+l22 state_counter[1]
+l23 state_counter[0]
+l24 dut.offset[15]
+l25 dut.offset[14]
+l26 dut.offset[13]
+l27 dut.offset[12]
+l28 dut.offset[11]
+l29 dut.offset[10]
+l30 dut.offset[9]
+l31 dut.offset[8]
+l32 dut.offset[7]
+l33 dut.offset[6]
+l34 dut.offset[5]
+l35 dut.offset[4]
+l36 dut.offset[3]
+l37 dut.offset[2]
+l38 dut.offset[1]
+l39 dut.offset[0]
+l40 fair_instance.fair
+c0 fair_instance.fair

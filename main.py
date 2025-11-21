@@ -3,7 +3,7 @@ import os
 from Aiger import *
 from PDR import *
 
-show_aig = 1
+show_aig = 0
 
 def get_file_extension(file_path):
     # 使用os.path.splitext()分割文件名和扩展名
@@ -12,7 +12,8 @@ def get_file_extension(file_path):
 
 def main(args):
     # filepath = args[0]
-    filepath = "./test.aag"
+    # filepath = "./testing files/2019/beem/anderson.3.prop1-func-interl.aig"
+    filepath = "./test.aig"
     filename,ext = get_file_extension(filepath)
     print("filename=",filename)
     print("fileext=",ext)
@@ -22,6 +23,7 @@ def main(args):
             print("Header:", aig["M"], aig["I"], aig["L"], aig["O"], aig["A"])
             print("Bad:", aig["bad"])
             print("Latches:", aig["latches"])
+            print("Constraints:", aig["constraints"])
             for ands in aig["ands"]:
                 print("AND gate:", ands)
         result = pdr_main(aig)
@@ -31,14 +33,20 @@ def main(args):
             print("Header:", aig["M"], aig["I"], aig["L"], aig["O"], aig["A"])
             print("Bad:", aig["bad"])
             print("Latches:", aig["latches"])
+            print("Constraints:", aig["constraints"])
             for ands in aig["ands"]:
                 print("AND gate:", ands)
         result = pdr_main(aig)
     else:
         print("请输入正确的文件格式")
         return
-    
-    print(result)
+    if result == 20:
+        print("The design is SAFE")
+    elif result == 10:
+        print("The design is UNSAFE")
+    else:
+        print("UnSolved")
+    # print(result)
 
 
 if __name__ == "__main__":

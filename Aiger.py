@@ -194,12 +194,14 @@ def read_aig(filename):
         # typ, M, I, L, O, A = header.split()
         # assert typ == "aig"
         # M, I, L, O, A = map(int, [M, I, L, O, A])
-
+        # print("M=",M,"I=",I,"L=",L,"O=",O,"A=",A,"B=",B,"C=",C)
         
         inputs = []
-        for _ in range(I):
-            input_val = int(f.readline().decode.strip())
-            inputs.append(input_val)
+        for i in range(1, I+1):
+            # input = f.readline().decode()
+            # print("Input line:", input)
+            # input_val = int(f.readline().decode().strip())
+            inputs.append(i*2)
 
         
         latches = []
