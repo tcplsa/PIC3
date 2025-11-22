@@ -17,7 +17,7 @@ num_inputs = 0
 num_latches = 0
 num_constraints = 0
 num_ands = 0
-option_ctg_tries = 1
+option_ctg_tries = 3
 nkobl = 0
 earliest_strengthened_frame = 0
 top_frame_cannot_reach_bad = True
@@ -32,6 +32,10 @@ lift = None
 init = None
 satelite = None
 satelite2 = None
+# CTG / generalization options (defaults if not configured elsewhere)
+option_ctg_max_depth = 0
+option_max_joins = 1<<20
+output_stats_for_ctg = False
 '''problem'''
 
 
@@ -208,7 +212,7 @@ def get_pre_of_bad(s):
     global bad_prime
     s.clear()
     Fk = depth()
-    # print("Fk=",Fk)
+    print("Fk=",Fk)
     # res = frames[Fk].solver.solve()
     # print("res before:",res)
     frames[Fk].solver.assume(bad_prime)
@@ -250,7 +254,7 @@ def get_pre_of_bad(s):
         extract_state_from_sat(frames[Fk].solver, s, None, Fk)  
         s.next = bad_state
         # print(s.next.latches) 
-        # show_state(s) 
+        show_state(s) 
         # print("end get pre of bad")
         return True
     else:  
@@ -298,13 +302,14 @@ def encode_init_condition(s,aig):
             s.add((-a[1]))
             s.add((-a[2]))
             s.add(0)
+    return s
     # print("add_cls finish load init")
 
 def is_init(latches,aig):
     global init
     if init == None:
         init = SATSolver()
-        encode_init_condition(init,aig)
+        init = encode_init_condition(init,aig)
     for l in latches:
         init.assume(l)
     res = init.solve()
@@ -427,11 +432,10 @@ def lit_cmp(a: int, b: int) -> int:
         # 绝对值相等时，按数值本身从小到大排
         return -1 if a < b else 1 if a > b else 0
 
-def is_inductive(aig,solver, latches, gen_core, reverse_assumption = False):
+def is_inductive(aig,solver, latches, gen_core = False, reverse_assumption = False):
     # print("start is_inductive")
     global core
     solver.clear_act()
-    # solver.set_clear_act()
     assumptions = []
     act = solver.max_var() + 1
     solver.add((-act))
@@ -457,9 +461,9 @@ def is_inductive(aig,solver, latches, gen_core, reverse_assumption = False):
         for i in latches:
             if solver.failed(prime_lit(i)):
                 core.append(i)
-            if is_init(core,aig):
-                core = latches.copy()
-                break
+        if is_init(core,aig):
+            core = list(latches)
+
     solver.set_clear_act()
     # print("core: ",core)
     # print("end is_inductive")
@@ -468,7 +472,7 @@ def is_inductive(aig,solver, latches, gen_core, reverse_assumption = False):
 
 
 
-def generalize(cube, k, depth):
+def generalize(cube, k, depth, aig=None):
     mic_failed = 0
     required = []
     cube.sort(key = lambda x:abs(x))
@@ -483,7 +487,7 @@ def generalize(cube, k, depth):
             if i != l:
                 cand.append(i)
         
-        if CTG_down(cand, k, depth, required):
+        if CTG_down(cand, k, depth, required, aig):
             mic_failed = 0
             cube = cand
         else:
@@ -492,8 +496,103 @@ def generalize(cube, k, depth):
                 break
             required.append(l)
 
-def CTG_down(cube, k, depth, required):
-    return False
+def CTG_down(cube, k, rec_depth, required, aig=None):
+    # Implements CTG_down behavior ported from the provided C++ version.
+    # cube: list of literals
+    # k: frame index
+    # rec_depth: recursion depth
+    # required: list of literals that must be kept
+    # aig: optional AIG structure (passed from callers); required for is_init checks
+    global option_ctg_max_depth, option_ctg_tries, option_max_joins
+
+    if aig is None:
+        # best-effort: try to use a name 'aig' from caller scope if set as global
+        try:
+            aig = globals().get('aig', None)
+        except Exception:
+            aig = None
+
+    ctg_ct = 0
+    join_ct = 0
+    while True:
+        # if cube is reachable from init, cannot CTG
+        if aig is not None and is_init(cube, aig):
+            return False
+
+        # check inductive at this frame
+        sat = frames[k].solver
+        if is_inductive(aig, sat, cube, True):
+            if output_stats_for_ctg:
+                print("The new cube satisfies induction")
+            # if core is smaller, replace
+            try:
+                if len(core) < len(cube):
+                    cube[:] = core[:]  # replace contents
+            except Exception:
+                pass
+            return True
+        else:
+            # depth guard
+            if rec_depth > option_ctg_max_depth:
+                return False
+
+            # get counterexample / successor state
+            s = State()
+            succ = State()
+            # make succ.latches contain the current cube (matches C++: State(cube, Cube()))
+            try:
+                succ.latches = list(cube)
+            except Exception:
+                succ.latches = []
+            # succ.next isn't used here in Python version; match C++'s extract call
+            extract_state_from_sat(sat, s, succ, k)
+
+            breaked = False
+            # attempt CTG lifting if allowed
+            if (ctg_ct < option_ctg_tries and k > 1
+                    and (aig is None or not is_init(s.latches, aig))
+                    and is_inductive(aig, frames[k-1].solver, s.latches, True)):
+                if output_stats_for_ctg:
+                    print("ctg satisfies induction, is lifted to", core)
+
+                # use current core as ctg (reference to global core, like C++ Cube &ctg = core)
+                ctg = core
+                ctg_ct += 1
+                # try to push ctg forward
+                i = k
+                for i in range(k, depth() + 1):
+                    # increment push attempts counter optional
+                    if not is_inductive(aig, frames[i].solver, ctg, False):
+                        break
+                Size = len(ctg)
+                # recursively minimize / generalize ctg
+                # call generalize/mic: we pass aig so is_init checks work
+                generalize(ctg, i-1, rec_depth+1, aig)
+                add_cube(ctg, i, True, False, i - k + 1 + (1 if len(ctg) < Size else 0))
+            else:
+                # join attempt
+                if join_ct < option_max_joins:
+                    ctg_ct = 0
+                    join_ct += 1
+                    join = []
+                    s_cti = set(s.latches)
+                    for lit in cube:
+                        if lit in s_cti:
+                            join.append(lit)
+                        elif lit in required:
+                            breaked = True
+                            # nAbortJoin counter not present; ignore
+                            break
+                    # replace cube contents
+                    cube[:] = join
+                    if output_stats_for_ctg:
+                        print("breaked =", breaked, ", ctg cant be removed, join cube and ctg", cube)
+                else:
+                    breaked = True
+
+            # cleanup (in C++ delete s, succ)
+            if breaked:
+                return False
 
 
 
@@ -534,10 +633,7 @@ def rec_block_cube(aig):
         print("obligation_queue size:", len(obligation_queue))
         obligation_queue.sort()
         cnt += 1
-        # '''测试代码'''
-        # if ct == 0: 
-        #     break
-        # '''测试代码'''
+
         obl = obligation_queue[0]
         sat = frames[obl.frame_k].solver
         # print("fk:", obl.frame_k)
@@ -547,17 +643,18 @@ def rec_block_cube(aig):
             # print("successfully block cube")
             del obligation_queue[0]
             tmp_core = core
-            generalize(tmp_core, obl.frame_k, 1)
+            generalize(tmp_core, obl.frame_k, 1, aig)
             # print("tmp_core: ",tmp_core)
             # generalize(tmp_core, obl.frame_k, 1)
             key = 0
             k = obl.frame_k + 1
+            # print("tmp_core:",tmp_core)
             for k in range(obl.frame_k + 1, depth() + 1):
                 key == 2
                 if is_inductive(aig, frames[k].solver, tmp_core, False) == False:
                     key = 1
                     break
-            if key == 2:
+            if key == 0:
                 k += 1
             if k > depth() + 1:
                 k = depth() + 1
@@ -700,7 +797,7 @@ def propagate(aig):
                     
                     # 处理每个cube构建AND门
                     for c in frames[i+1].cubes:
-                        cc = c.copy()  # 复制cube
+                        cc = list(c)  # 复制cube（frames 存的是 tuple）
                         if len(cc) == 0:
                             cc.append(-1)
                         
@@ -855,7 +952,7 @@ def pdr_main(aig):
     cnt = 0
     while True:
         cnt += 1
-        if cnt > 10000:  #强制退出协议
+        if cnt > 2147483640:  #强制退出协议
             unknown = True
             break
         

@@ -6,132 +6,7 @@ import ctypes
 
 
 state_count = 0
-# class CNFFormula:
-#     """CNF公式类，用于存储子句并与minisat交互"""
-    
-#     def __init__(self):
-#         self.clauses = []  # 存储子句的列表，每个子句是一个整数列表
-#         self.var_count = 0  # 变量数量
-        
-#     def add_clause(self, clause):
 
-#         """
-#         向CNF公式添加一个子句
-        
-#         参数:
-#             clause: 整数列表，每个整数表示一个文字(变量或其否定)
-#                     正数表示变量本身，负数表示变量的否定
-#         """
-#         if not isinstance(clause, list):
-#             raise ValueError("子句必须是一个整数列表")
-        
-#         if clause == [None]:
-#             return
-        
-        
-#         # 检查子句中的变量是否有效并更新变量计数
-#         for lit in clause:
-#             if not isinstance(lit, int) or lit == 0:
-#                 print(lit)
-#                 raise ValueError("子句中的文字必须是非零整数")
-            
-#             var = abs(lit)
-#             if var > self.var_count:
-#                 self.var_count = var
-                
-#         self.clauses.append(clause)
-    
-#     def save_to_cnf(self, filename):
-#         """
-#         将CNF公式保存为DIMACS CNF格式文件
-        
-#         参数:
-#             filename: 保存的文件名
-#         """
-#         with open(filename, 'w') as f:
-#             # 写入问题描述行：p cnf 变量数 子句数
-#             f.write(f"p cnf {self.var_count} {len(self.clauses)}\n")
-            
-#             # 写入每个子句，每个子句以0结尾
-#             for clause in self.clauses:
-#                 clause_str = ' '.join(map(str, clause)) + ' 0\n'
-#                 f.write(clause_str)
-    
-#     def solve(self,):
-
-#         base_dir = os.path.dirname(os.path.abspath(__file__))
-#         minisat_path = os.path.join(base_dir, "bin", "minisat")
-
-#         with tempfile.NamedTemporaryFile(mode='w', suffix='.cnf', delete=False) as cnf_file, \
-#              tempfile.NamedTemporaryFile(mode='r', suffix='.txt', delete=False) as result_file:
-            
-#             cnf_filename = cnf_file.name
-#             result_filename = result_file.name
-#             result_filename = "result_file.txt"
-        
-#         try:
-
-#             self.save_to_cnf(cnf_filename)
-            
-#             # 调用minisat求解器
-#             result = subprocess.run(
-#                 [minisat_path, cnf_filename, result_filename],
-#                 capture_output=True,
-#                 text=True
-#             )
-            
-#             # 检查是否运行成功
-#             # minisat返回码：0=正常，10=SAT，20=UNSAT
-#             if result.returncode not in [0, 10, 20]:
-#                 raise RuntimeError(f"Minisat运行失败: {result.stderr}")
-            
-#             # 读取并解析结果
-#             # with open(result_filename, 'r') as f:
-#             #     first_line = f.readline().strip()
-#             #     if first_line == 'SAT':
-#             #         return 'SAT'
-#             #     elif first_line == 'UNSAT':
-#             #         return 'UNSAT'
-#             #     else:
-#             #         raise ValueError(f"无法解析Minisat结果: {first_line}")
-                
-                
-#             with open(result_filename, 'r') as f:
-#                 lines = [line.strip() for line in f.readlines() if line.strip()]
-
-#             if not lines:
-#                 return 'ERROR', None  # 输出文件为空
-
-#             first_line = lines[0].upper()
-#             if first_line == 'SAT':
-#                 # 解析变量赋值（第二行，格式如"1 -2 3 0"）
-#                 model = {}
-#                 if len(lines) >= 2:
-#                     assignment_line = lines[1]
-#                     for lit_str in assignment_line.split():
-#                         try:
-#                             lit = int(lit_str)
-#                         except ValueError:
-#                             continue  # 跳过非整数内容
-#                         if lit == 0:
-#                             break  # 赋值以0结尾
-#                         var = abs(lit)
-#                         model[var] = 1 if lit > 0 else -1  # 1=真，-1=假
-#                 return 'SAT', model
-
-#             elif first_line == 'UNSAT':
-#                 return 'UNSAT', None
-
-#             else:
-#                 return 'ERROR', None
-                    
-#         finally:
-#             pass
-#             # 清理临时文件
-#             if os.path.exists(cnf_filename):
-#                 os.remove(cnf_filename)
-#             # if os.path.exists(result_filename):
-#             #     os.remove(result_filename)
 
 class Variable:
     def __init__(self, dimacs_index, name = "", type = "", type_index = 0, prime = 0):
@@ -565,8 +440,8 @@ class SATSolver:
         print(f"  Max variable: {self.max_var()}")
         status_map = {self.SAT: 'SAT', self.UNSAT: 'UNSAT', self.UNKNOWN: 'Unknown'}
         print(f"  Solve result: {status_map[self.solve_result]}")
-        for assume in self.pre_assumptions:
-            print("assume:",assume)
+        for i, assume in enumerate(self.pre_assumptions):
+            print(f"assume[{i+1}]:",assume)
         # for i, clause in enumerate(self.clauses):
         #     print(f"clause {i}:", clause)
         raw_clauses = self.get_clauses()
@@ -591,7 +466,7 @@ class SATSolver:
             print(f"  Model size: {len(self.var_values)}")
         elif self.solve_result == self.UNSAT:
             print(f"  Failed assumptions: ", self.failed_assumptions)
-        print(self.var_values)
+        # print(self.var_values)
         self.pre_assumptions.clear()
 
 # class SATSolver:
