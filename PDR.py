@@ -17,7 +17,7 @@ num_inputs = 0
 num_latches = 0
 num_constraints = 0
 num_ands = 0
-option_ctg_tries = 3
+
 nkobl = 0
 earliest_strengthened_frame = 0
 top_frame_cannot_reach_bad = True
@@ -33,12 +33,19 @@ init = None
 satelite = None
 satelite2 = None
 # CTG / generalization options (defaults if not configured elsewhere)
+option_ctg_tries = 5
 option_ctg_max_depth = 0
 option_max_joins = 1<<20
 output_stats_for_ctg = False
 '''problem'''
 
+show_propagate_info = True
+show_block_info = True
+show_pre_of_bad = True
 
+# show_propagate_info = False
+# show_block_info = False
+# show_pre_of_bad = False
 
 
 def depth():
@@ -208,15 +215,17 @@ def extract_state_from_sat(sat, s, succ, index):
     return
 
 def get_pre_of_bad(s):
-    print("get pre of bad")
+    global show_pre_of_bad
+    if show_pre_of_bad:
+        print("get pre of bad")
     global bad_prime
     s.clear()
     Fk = depth()
-    print("Fk=",Fk)
+    if show_pre_of_bad:
+        print("Fk=",Fk)
     # res = frames[Fk].solver.solve()
     # print("res before:",res)
     frames[Fk].solver.assume(bad_prime)
-    
     res = frames[Fk].solver.solve(False)
     
     # frames[Fk].solver.show_info()
@@ -254,11 +263,11 @@ def get_pre_of_bad(s):
         extract_state_from_sat(frames[Fk].solver, s, None, Fk)  
         s.next = bad_state
         # print(s.next.latches) 
-        show_state(s) 
-        # print("end get pre of bad")
+        if show_pre_of_bad:
+            # show_state(s)
+            pass 
         return True
     else:  
-        # print("end get pre of bad")
         return False
     
 def encode_init_condition(s,aig):
@@ -462,7 +471,7 @@ def is_inductive(aig,solver, latches, gen_core = False, reverse_assumption = Fal
             if solver.failed(prime_lit(i)):
                 core.append(i)
         if is_init(core,aig):
-            core = list(latches)
+            core[:] = list(latches)
 
     solver.set_clear_act()
     # print("core: ",core)
@@ -475,9 +484,10 @@ def is_inductive(aig,solver, latches, gen_core = False, reverse_assumption = Fal
 def generalize(cube, k, depth, aig=None):
     mic_failed = 0
     required = []
-    cube.sort(key = lambda x:abs(x))
+    cube.sort(key = lambda x:(abs(x),x))
     random.shuffle(cube)
-    tmp_cube = cube
+    
+    tmp_cube = list(cube)
     for l in tmp_cube:
         cand = []
         if l not in cube:
@@ -489,7 +499,8 @@ def generalize(cube, k, depth, aig=None):
         
         if CTG_down(cand, k, depth, required, aig):
             mic_failed = 0
-            cube = cand
+            # update the original list in-place so the caller sees the change
+            cube[:] = cand
         else:
             mic_failed += 1
             if mic_failed > option_ctg_tries:
@@ -600,7 +611,7 @@ def add_cube(cube, k ,to_all, ispropagate, prtimes):
     global earliest_strengthened_frame
     if ispropagate == False:
         earliest_strengthened_frame =min(earliest_strengthened_frame,k)
-    cube.sort(key = lambda x:abs(x))
+    cube.sort(key = lambda x:(abs(x),x))
     cube_tuple = tuple(cube)
     if cube_tuple in frames[k].cubes:
         return
@@ -625,12 +636,15 @@ def add_cube(cube, k ,to_all, ispropagate, prtimes):
 def rec_block_cube(aig):
     global nkobl
     global unknown
-    print("rec_block_cube")
+    global show_block_info
+    if show_block_info:
+        print("rec_block_cube")
     states = []
     ct = 0
     cnt = 0
     while len(obligation_queue) != 0:
-        print("obligation_queue size:", len(obligation_queue))
+        if show_block_info:
+            print("obligation_queue size:", len(obligation_queue))
         obligation_queue.sort()
         cnt += 1
 
@@ -638,12 +652,12 @@ def rec_block_cube(aig):
         sat = frames[obl.frame_k].solver
         # print("fk:", obl.frame_k)
         # sat.show_info()
-        # exit()
         if is_inductive(aig, sat, obl.state.latches, True)  == True:
             # print("successfully block cube")
             del obligation_queue[0]
-            tmp_core = core
+            tmp_core = list(core)
             generalize(tmp_core, obl.frame_k, 1, aig)
+
             # print("tmp_core: ",tmp_core)
             # generalize(tmp_core, obl.frame_k, 1)
             key = 0
@@ -675,11 +689,12 @@ def rec_block_cube(aig):
                     nkobl += 1
                     break  # 找到匹配后跳出循环
             add_cube(tmp_core, k, True, False, k - obl.frame_k + (1 if (len(tmp_core) < len(core)) else 0))
-            if k <= depth() and pushpo:  
+            if k <= depth():  
                 # print("k:",k,"  depth:",depth())
                 obligation_queue.append(Obligation(obl.state, k, obl.depth))
         else:
-            print("block cube failed")
+            if show_block_info:
+                print("block cube failed")
             if cnt > 2147483640:
                 unknown = True
                 return False
@@ -708,7 +723,7 @@ def rec_block_cube(aig):
 
             # 生成新状态并处理
             s = State()  # 创建新 State 实例
-
+            states.append(s)  # 将新状态添加到全局状态列表
             if obl.frame_k == 0:
                 # 处理 frame_k 为 0 的情况：提取输入和锁存器值
                 s.clear()  # 清空状态的输入和锁存器
@@ -743,16 +758,18 @@ def rec_block_cube(aig):
 
 def propagate(aig):
     global bad
+    global show_propagate_info
     start_k = 1
     if top_frame_cannot_reach_bad == True:
         start_k = depth()
-    print("Propagate from frame", start_k)
+    if show_propagate_info:
+        print("Propagate from frame", start_k)
     for i in range(start_k, depth() + 1):
         ckeep = 0
         cprop = 0
         idx = 0  
         cubes_list = list(frames[i].cubes)
-        while idx < len(frames[i].cubes):
+        while idx < len(cubes_list):
             ci = cubes_list[idx] 
             # print("Checking cube at index", idx, ":", ci)
             if is_inductive(aig, frames[i].solver, ci, True):
@@ -763,11 +780,13 @@ def propagate(aig):
                 else:
                     add_cube(core, i+1, False, True, 0)
                 cubes_list.pop(idx) 
-                frames[i].cubes = set(cubes_list)       
+                    
             else:
                 ckeep += 1
                 idx += 1  
-        
+        # frames[i].cubes = set(cubes_list)   
+        frames[i].cubes.clear()
+        frames[i].cubes.update(cubes_list)
         if len(frames[i].cubes) == 0:
             if len(frames[i].cubes) == 0:
                 # 初始化变量
