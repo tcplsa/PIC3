@@ -205,7 +205,7 @@ def write_log_to_file(log, dst_file_path, result, total_elapsed):
 
 def main(args):
     # 默认文件路径（可通过命令行参数覆盖）
-    filepath = "/home/lyj238/wdl/IC3/test.blif"
+    filepath = "/home/lyj238/wdl/IC3/test2.blif"
     # filepath = "/home/lyj238/wdl/IC3/pipeLinedAdder_final.blif"
     if args:  # 如果传入命令行参数，使用第一个参数作为文件路径
         filepath = args[0]
