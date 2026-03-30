@@ -91,7 +91,7 @@ def prime_lit(lit):
 
 def show_state(s):
     # 初始化字符列表，长度为输入数+锁存器数+2，默认值'x'
-    a = ['x'] * (num_inputs + num_latches + 2)
+    a = ['x'] * (num_inputs + num_latches + 20)
 
     # 处理输入（inputs）：根据符号设置 '0' 或 '1'
     for i in s.inputs:
@@ -510,7 +510,7 @@ def encode_translation(s,satelite,cons = True):
         s.add(1)
         s.add(0)
     # print("add_cls finish load transition")
-    return None
+    return satelite
     
     
 def lit_cmp(a: int, b: int) -> int:
@@ -997,6 +997,7 @@ def new_frame():     #创建新的帧
     frames.append(frame)
     global satelite1
     satelite1 = encode_translation(frames[last].solver,satelite1)
+    assert satelite1 != None
     for l in constraints_prime:
         frames[last].solver.add(l)
         frames[last].solver.add(0)
